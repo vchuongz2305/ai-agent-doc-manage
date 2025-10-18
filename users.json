@@ -1,0 +1,74 @@
+{
+  "users": [
+    {
+      "id": "user001",
+      "name": "Nguyễn Văn A",
+      "department": "IT",
+      "email": "nguyenvana@company.com",
+      "position": "Senior Developer"
+    },
+    {
+      "id": "user002", 
+      "name": "Trần Thị B",
+      "department": "HR",
+      "email": "tranthib@company.com",
+      "position": "HR Manager"
+    },
+    {
+      "id": "user003",
+      "name": "Lê Văn C", 
+      "department": "Finance",
+      "email": "levanc@company.com",
+      "position": "Finance Analyst"
+    },
+    {
+      "id": "user004",
+      "name": "Phạm Thị D",
+      "department": "Marketing", 
+      "email": "phamthid@company.com",
+      "position": "Marketing Specialist"
+    },
+    {
+      "id": "user005",
+      "name": "Hoàng Văn E",
+      "department": "Sales",
+      "email": "hoangvane@company.com", 
+      "position": "Sales Manager"
+    },
+    {
+      "id": "user006",
+      "name": "Vũ Thị F",
+      "department": "IT",
+      "email": "vuthif@company.com",
+      "position": "System Administrator"
+    },
+    {
+      "id": "user007", 
+      "name": "Đặng Văn G",
+      "department": "HR",
+      "email": "dangvang@company.com",
+      "position": "HR Specialist"
+    },
+    {
+      "id": "user008",
+      "name": "Bùi Thị H",
+      "department": "Finance",
+      "email": "buithih@company.com", 
+      "position": "Accountant"
+    },
+    {
+      "id": "user009",
+      "name": "Ngô Văn I",
+      "department": "IT", 
+      "email": "ngovani@company.com",
+      "position": "DevOps Engineer"
+    },
+    {
+      "id": "user010",
+      "name": "Lý Thị K",
+      "department": "Marketing",
+      "email": "lythik@company.com",
+      "position": "Content Creator"
+    }
+  ]
+}
