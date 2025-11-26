@@ -1,5 +1,5 @@
 {
-  "name": "My workflow 2",
+  "name": "Dang Hong Nguyen - Analyze document",
   "nodes": [
     {
       "parameters": {
@@ -17,24 +17,6 @@
     },
     {
       "parameters": {
-        "httpMethod": "POST",
-        "path": "pdf-summarizer",
-        "options": {
-          "responseMode": "responseNode"
-        }
-      },
-      "id": "813f3e20-aed6-4c4f-81f8-8c2d78060d39",
-      "name": "1️⃣ Webhook Trigger",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
-      "position": [
-        -1024,
-        -592
-      ],
-      "webhookId": "pdf-summarizer-webhook"
-    },
-    {
-      "parameters": {
         "pollTimes": {
           "item": [
             {
@@ -45,22 +27,22 @@
         "triggerOn": "specificFolder",
         "folderToWatch": {
           "__rl": true,
-          "value": "19dKOR2bA5dHGHCtfZ416c5qVou0lcDwF",
+          "value": "14faxpPz6EOGRI14HAEgSI85EWpBZrFkX",
           "mode": "list",
-          "cachedResultName": "Extract PDF",
-          "cachedResultUrl": "https://drive.google.com/drive/folders/19dKOR2bA5dHGHCtfZ416c5qVou0lcDwF"
+          "cachedResultName": "PDF Folder",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/14faxpPz6EOGRI14HAEgSI85EWpBZrFkX"
         },
         "event": "fileCreated",
         "options": {}
       },
+      "id": "813f3e20-aed6-4c4f-81f8-8c2d78060d39",
+      "name": "File Created",
       "type": "n8n-nodes-base.googleDriveTrigger",
       "typeVersion": 1,
       "position": [
         -1024,
-        -400
+        -592
       ],
-      "id": "google-drive-trigger-flow1",
-      "name": "Google Drive Trigger",
       "credentials": {
         "googleDriveOAuth2Api": {
           "id": "atJ86VdDoYyS4tiT",
@@ -539,8 +521,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        272,
-        -864
+        112,
+        -912
       ],
       "id": "48b69cd8-4ac0-48ea-96d1-6b3a8f5a55d2",
       "name": "Google Gemini Chat Model",
@@ -550,23 +532,6 @@
           "name": "Google Gemini(PaLM) Api account 2"
         }
       }
-    },
-    {
-      "parameters": {
-        "httpMethod": "POST",
-        "url": "https://api.aidocmanageagent.io.vn/webhook/flow1-result",
-        "options": {
-          "responseMode": "responseNode"
-        }
-      },
-      "id": "send-result-api",
-      "name": "🔚 Send Result to API",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
-      "position": [
-        2400,
-        -608
-      ]
     }
   ],
   "pinData": {},
@@ -612,11 +577,11 @@
         ]
       ]
     },
-    "Google Drive Trigger": {
+    "File Created": {
       "main": [
         [
           {
-            "node": "Set File ID",
+            "node": "Loop Over Items",
             "type": "main",
             "index": 0
           }
@@ -888,7 +853,7 @@
       "main": [
         [
           {
-            "node": "🔚 Send Result to API",
+            "node": "2nd Loop Over Items",
             "type": "main",
             "index": 0
           }
@@ -937,11 +902,11 @@
       ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "e7b28bfe-fcd0-4cf1-92b4-bf772683e0f5",
+  "versionId": "2489a65c-4435-4477-8584-d7f38061b828",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "d29aff038a4897a8be0d9843c07ba06d6b485556105b19c20835a7b0bfd5b9b2"

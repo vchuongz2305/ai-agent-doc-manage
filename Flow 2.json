@@ -1,71 +1,18 @@
 {
-  "name": "Flow 2",
+  "name": "Bui Cong Chuong - check GDPR",
   "nodes": [
     {
       "parameters": {
-        "content": "### LUỒNG 3: AI DOCUMENT MANAGEMENT AGENT – GDPR COMPLIANCE (Fixed Clean)\n\n**Mục đích:** Tự động kiểm tra tuân thủ GDPR cho tài liệu.\n\n**Tính năng chính:**\n• AI quyết định hành động GDPR (delete/anonymize/allow)\n• Xác định legal basis, DSR, retention\n• Tự động thông báo DPO khi cần\n• Ghi log và audit trail đầy đủ.\n\n**Cải tiến:**\n• Sửa lỗi phân nhánh If/Else chuẩn.\n• Thêm Merge node để hợp nhất các nhánh hành động."
+        "content": "### LUỒNG 2: AI DOCUMENT MANAGEMENT AGENT – GDPR COMPLIANCE (Fixed Clean)\n\n**Mục đích:** Tự động kiểm tra tuân thủ GDPR cho tài liệu.\n\n**Tính năng chính:**\n• AI quyết định hành động GDPR (delete/anonymize/allow)\n• Xác định legal basis, DSR, retention\n• Tự động thông báo DPO khi cần\n• Ghi log và audit trail đầy đủ.\n\n**Cải tiến:**\n• Sửa lỗi phân nhánh If/Else chuẩn.\n• Thêm Merge node để hợp nhất các nhánh hành động."
       },
       "name": "📋 Mô tả Luồng GDPR",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        0,
-        0
+        -1760,
+        -448
       ],
-      "id": "437a651e-0ae6-47e3-b0cb-e9c224ab768f"
-    },
-    {
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "gdpr-compliance",
-        "options": {
-          "responseMode": "responseNode"
-        }
-      },
-      "name": "1️⃣ Webhook Trigger",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
-      "position": [
-        160,
-        176
-      ],
-      "id": "f46c0874-4672-4cb1-906a-e13a11422c6b",
-      "webhookId": "gdpr-compliance-webhook"
-    },
-    {
-      "parameters": {
-        "pollTimes": {
-          "item": [
-            {
-              "mode": "everyMinute"
-            }
-          ]
-        },
-        "triggerOn": "specificFolder",
-        "folderToWatch": {
-          "__rl": true,
-          "value": "19dKOR2bA5dHGHCtfZ416c5qVou0lcDwF",
-          "mode": "list",
-          "cachedResultName": "Extract PDF",
-          "cachedResultUrl": "https://drive.google.com/drive/folders/19dKOR2bA5dHGHCtfZ416c5qVou0lcDwF"
-        },
-        "event": "fileCreated",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.googleDriveTrigger",
-      "typeVersion": 1,
-      "position": [
-        160,
-        400
-      ],
-      "id": "google-drive-trigger-flow3",
-      "name": "Google Drive Trigger",
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "j8THGAxv73mfiAPY",
-          "name": "Google Drive account 4"
-        }
-      }
+      "id": "44b8796f-bd9f-45bb-8029-a1ac5d0b892b"
     },
     {
       "parameters": {
@@ -75,10 +22,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        400,
-        352
+        -1360,
+        -96
       ],
-      "id": "6d753a6b-e97c-47d0-942f-a166f60932bd"
+      "id": "89959532-8edf-49f1-9f14-fbd6764a3dda"
     },
     {
       "parameters": {
@@ -90,21 +37,20 @@
           "cachedResultName": "models/gemini-2.5-flash"
         },
         "text": "=Phân tích GDPR. Quyết định: delete|anonymize|allow.\n\n{\n  \"content\": {\n    \"gdprDecision\": \"delete|anonymize|allow\",\n    \"notifyDPO\": true,\n    \"legalBasis\": \"consent|contract|null\",\n    \"retentionDays\": 30,\n    \"redactionFields\": [],\n    \"gdprJustification\": \"Lý do\",\n    \"fileUrl\": \"{{ $json.fileUrl }}\",\n    \"fileName\": \"{{ $json.fileName }}\",\n    \"personalDataFound\": [],\n    \"sensitiveDataDetected\": false,\n    \"dataVolume\": \"high|medium|low\"\n  },\n  \"finishReason\": \"stop\",\n  \"index\": 0,\n  \"uploader\": {{ $json.uploader }}\n}",
-        "documentUrls": "",
         "options": {}
       },
       "name": "3️⃣ AI GDPR Decision",
       "type": "@n8n/n8n-nodes-langchain.googleGemini",
       "typeVersion": 1,
       "position": [
-        608,
-        352
+        -1152,
+        -96
       ],
-      "id": "7491a102-e21e-439a-86ea-09b86cbbac95",
+      "id": "3b5d4957-2fdb-4e3c-95a1-98864c580347",
       "credentials": {
         "googlePalmApi": {
-          "id": "jUZSFnAVnDJMK2R4",
-          "name": "Google Gemini(PaLM) Api account 3"
+          "id": "91898OzbZbpGF2b2",
+          "name": "Google Gemini(PaLM) Api account 4"
         }
       }
     },
@@ -116,10 +62,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        800,
-        352
+        -960,
+        -96
       ],
-      "id": "602f7e24-c254-4094-b6b8-902615e47ec6"
+      "id": "e349f3ff-5cdb-42c3-b7ea-3008883cf033"
     },
     {
       "parameters": {
@@ -149,10 +95,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        992,
-        224
+        -768,
+        -224
       ],
-      "id": "74ab1ef4-7ebc-4674-986d-6223bbc8d44f"
+      "id": "16570a87-fbdb-4d81-962c-2451736c9e79"
     },
     {
       "parameters": {
@@ -160,7 +106,8 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "strict"
+            "typeValidation": "strict",
+            "version": 1
           },
           "conditions": [
             {
@@ -181,10 +128,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        992,
-        384
+        -768,
+        -64
       ],
-      "id": "77006323-4f96-47e4-8576-b3f8838d5bc6"
+      "id": "6946f8f6-9367-4c47-9273-486a57d54b73"
     },
     {
       "parameters": {
@@ -194,10 +141,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1184,
-        144
+        -576,
+        -304
       ],
-      "id": "70421f46-f1bf-4fab-bd14-783a20cba7ca"
+      "id": "28124028-d9fc-48bd-9b15-3e823153e526"
     },
     {
       "parameters": {
@@ -207,10 +154,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1184,
-        384
+        -576,
+        -64
       ],
-      "id": "6b91f0af-82ef-44d1-8ad6-f2aa091c090b"
+      "id": "cc8da31e-6341-4aad-9983-0b582482166a"
     },
     {
       "parameters": {
@@ -220,10 +167,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1184,
-        560
+        -576,
+        128
       ],
-      "id": "ac8a0a80-5c83-4349-aaa9-a417e45a6de9"
+      "id": "d9cdd524-7505-4c82-8852-6fe138479bab"
     },
     {
       "parameters": {},
@@ -231,10 +178,10 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 1,
       "position": [
-        1360,
-        160
+        -400,
+        -288
       ],
-      "id": "af133846-0e3a-47cc-adfa-39c4a5fe91ed"
+      "id": "a9fdb4c3-b871-453d-950b-04c003ebafda"
     },
     {
       "parameters": {
@@ -242,7 +189,8 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "strict"
+            "typeValidation": "strict",
+            "version": 1
           },
           "conditions": [
             {
@@ -253,9 +201,18 @@
                 "type": "boolean",
                 "operation": "equal"
               }
+            },
+            {
+              "id": "f37a3bfe-bcfc-4d92-b65b-c672411cf81e",
+              "leftValue": "={{ $json.notifyDPO }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
             }
           ],
-          "combinator": "and"
+          "combinator": "or"
         },
         "options": {}
       },
@@ -263,14 +220,14 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1552,
-        352
+        -208,
+        -96
       ],
-      "id": "bde1edc5-c5e1-4cb8-bf98-ca9b88a9ff57"
+      "id": "e4b64e9b-b6cd-43da-8d4d-2e57c374134f"
     },
     {
       "parameters": {
-        "sendTo": "dpo@company.com",
+        "sendTo": "tranhaduy204@gmail.com",
         "subject": "=🔐 GDPR Alert: {{ $json.gdprDecision?.toUpperCase() || 'UNKNOWN' }} file requires immediate attention",
         "emailType": "text",
         "message": "=Kính chào DPO,\n\nHệ thống AI GDPR Compliance Agent đã phát hiện một tài liệu vi phạm quy định GDPR và cần sự can thiệp ngay lập tức.\n\n**Thông tin tài liệu:**\n- Tên file: {{ $json.fileName || 'Không xác định' }}\n- URL file: {{ $json.fileUrl || 'Không có URL' }}\n- Uploader: {{ $json.uploader || 'Không xác định' }}\n- Quyết định xử lý: {{ $json.gdprDecision || 'Không xác định' }}\n- Thông báo DPO: {{ $json.notifyDPO || 'Không' }}\n- Cơ sở pháp lý: {{ $json.legalBasis || 'Không có' }}\n\n**🔍 Phân tích nội dung file:**\n- Dữ liệu cá nhân tìm thấy: {{ $json.personalDataFound && $json.personalDataFound.length > 0 ? $json.personalDataFound.join(', ') : 'Không có' }}\n- Dữ liệu nhạy cảm: {{ $json.sensitiveDataDetected ? 'Có' : 'Không' }}\n- Khối lượng dữ liệu: {{ $json.dataVolume || 'Không xác định' }}\n- Các trường cần redact: {{ $json.redactionFields && $json.redactionFields.length > 0 ? $json.redactionFields.join(', ') : 'Không có' }}\n\n**Lý do quyết định:**\n{{ $json.gdprJustification || 'Không có lý do cụ thể được cung cấp.' }}\n\n**Thời điểm ra quyết định:** {{ $json.aiDecisionTimestamp || (new Date()).toISOString() }}\n\n**Hành động khuyến nghị:**\n- Xem xét và xác nhận quyết định của AI\n- Liên hệ với uploader để làm rõ mục đích sử dụng dữ liệu\n- Thực hiện các biện pháp khắc phục cần thiết\n- Cập nhật chính sách bảo mật nếu cần\n\nTrân trọng,\n**AI GDPR Compliance Agent**",
@@ -280,15 +237,15 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2,
       "position": [
-        1744,
-        256
+        -16,
+        -192
       ],
-      "id": "8a81289d-ce65-46b0-9a43-7e54d225e376",
+      "id": "ee01bb5c-0a72-4e66-8acc-83b4f8916d1e",
       "webhookId": "02bbf782-9357-4ea4-b78e-664aaad97422",
       "credentials": {
         "gmailOAuth2": {
-          "id": "JBRXHZYyZ9p1r53u",
-          "name": "Gmail account 3"
+          "id": "LTZtTwz14XXGyrdz",
+          "name": "Gmail account 2"
         }
       }
     },
@@ -304,15 +261,15 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2,
       "position": [
-        1936,
-        352
+        176,
+        -96
       ],
-      "id": "87b981a9-628c-486f-a40c-8b691e212bb3",
+      "id": "b24105fd-5a3e-4876-8840-a008514fb57c",
       "webhookId": "62b2fab2-9f29-4f76-9c77-89e5acbbdf61",
       "credentials": {
         "gmailOAuth2": {
-          "id": "JBRXHZYyZ9p1r53u",
-          "name": "Gmail account 3"
+          "id": "LTZtTwz14XXGyrdz",
+          "name": "Gmail account 2"
         }
       }
     },
@@ -321,23 +278,54 @@
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "1AlnBdd389X4a9cgfvpH3RB-S0SQx_fnEHLLWfwrMtv8",
+          "value": "16eU4No0bLeMYCxjo0586358kzjuBrrf52fRo_n7SDFg",
           "mode": "list",
           "cachedResultName": "Log GDPR",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1AlnBdd389X4a9cgfvpH3RB-S0SQx_fnEHLLWfwrMtv8/edit?usp=drivesdk"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/16eU4No0bLeMYCxjo0586358kzjuBrrf52fRo_n7SDFg/edit?usp=drivesdk"
         },
         "sheetName": {
           "__rl": true,
           "value": "gid=0",
           "mode": "list",
           "cachedResultName": "Trang tính1",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1AlnBdd389X4a9cgfvpH3RB-S0SQx_fnEHLLWfwrMtv8/edit#gid=0"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/16eU4No0bLeMYCxjo0586358kzjuBrrf52fRo_n7SDFg/edit#gid=0"
         },
         "columns": {
           "mappingMode": "autoMapInputData",
           "value": {},
-          "matchingColumns": [],
-          "schema": [],
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "threadId",
+              "displayName": "threadId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "labelIds",
+              "displayName": "labelIds",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
           "attemptToConvertTypes": false,
           "convertFieldsToString": false
         },
@@ -347,14 +335,14 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4,
       "position": [
-        2128,
-        352
+        368,
+        -96
       ],
-      "id": "f7767e86-54b6-48ee-8cc4-850b95b0239e",
+      "id": "3163359c-2a13-4298-9ed5-f35350b121d6",
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "wiCAtkSwksUQtdMn",
-          "name": "Google Sheets account 2"
+          "id": "cmWSNW94QNgr3T8o",
+          "name": "Google Sheets account"
         }
       }
     },
@@ -366,10 +354,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2320,
-        352
+        560,
+        -96
       ],
-      "id": "acdb5bc6-c940-4c76-bb7e-a5dea11c6eb6"
+      "id": "aac785df-4161-45aa-a842-0a3facdbedd9"
     },
     {
       "parameters": {
@@ -379,10 +367,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1744,
-        464
+        32,
+        112
       ],
-      "id": "1c83a5dd-6b4e-41dd-88b9-c262703098fd"
+      "id": "030633ec-0900-4e7e-b5a4-66c6dc76dc82"
     },
     {
       "parameters": {
@@ -401,65 +389,27 @@
           "cachedResultName": "Extract PDF",
           "cachedResultUrl": "https://drive.google.com/drive/folders/19dKOR2bA5dHGHCtfZ416c5qVou0lcDwF"
         },
-        "event": "folderCreated"
+        "event": "fileCreated",
+        "options": {}
       },
       "type": "n8n-nodes-base.googleDriveTrigger",
       "typeVersion": 1,
       "position": [
-        176,
-        400
+        -1584,
+        -48
       ],
-      "id": "c4d060ce-47dd-457f-aa3d-ee0f66f8e970",
+      "id": "152d20a2-fe8b-4759-8d55-d0ca0b232ffb",
       "name": "Google Drive Trigger1",
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "j8THGAxv73mfiAPY",
-          "name": "Google Drive account 4"
+          "id": "atJ86VdDoYyS4tiT",
+          "name": "Google Drive account 2"
         }
       }
-    },
-    {
-      "parameters": {
-        "httpMethod": "POST",
-        "url": "https://api.aidocmanageagent.io.vn/webhook/flow3-result",
-        "options": {
-          "responseMode": "responseNode"
-        }
-      },
-      "id": "send-result-api-flow3",
-      "name": "🔚 Send Result to API",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
-      "position": [
-        2500,
-        352
-      ]
     }
   ],
   "pinData": {},
   "connections": {
-    "1️⃣ Webhook Trigger": {
-      "main": [
-        [
-          {
-            "node": "2️⃣ Chuẩn hóa dữ liệu đầu vào",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Google Drive Trigger": {
-      "main": [
-        [
-          {
-            "node": "2️⃣ Chuẩn hóa dữ liệu đầu vào",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "2️⃣ Chuẩn hóa dữ liệu đầu vào": {
       "main": [
         [
@@ -635,17 +585,6 @@
         ]
       ]
     },
-    "1️⃣2️⃣ Tạo Audit Trail GDPR": {
-      "main": [
-        [
-          {
-            "node": "🔚 Send Result to API",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Google Drive Trigger1": {
       "main": [
         [
@@ -662,11 +601,11 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "36c87351-47f4-4344-8e14-7030ccfa52cb",
+  "versionId": "6b553c41-3c17-4fd3-ab90-ca625fadd1ce",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "d29aff038a4897a8be0d9843c07ba06d6b485556105b19c20835a7b0bfd5b9b2"
   },
-  "id": "2emfhdhTSNxiGuIt",
+  "id": "NovgqYS6R0udt74I",
   "tags": []
 }
