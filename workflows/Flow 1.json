@@ -17,38 +17,20 @@
     },
     {
       "parameters": {
-        "pollTimes": {
-          "item": [
-            {
-              "mode": "everyMinute"
-            }
-          ]
-        },
-        "triggerOn": "specificFolder",
-        "folderToWatch": {
-          "__rl": true,
-          "value": "14faxpPz6EOGRI14HAEgSI85EWpBZrFkX",
-          "mode": "list",
-          "cachedResultName": "PDF Folder",
-          "cachedResultUrl": "https://drive.google.com/drive/folders/14faxpPz6EOGRI14HAEgSI85EWpBZrFkX"
-        },
-        "event": "fileCreated",
+        "httpMethod": "POST",
+        "path": "document-analyzer",
+        "responseMode": "responseNode",
         "options": {}
       },
       "id": "813f3e20-aed6-4c4f-81f8-8c2d78060d39",
-      "name": "File Created",
-      "type": "n8n-nodes-base.googleDriveTrigger",
-      "typeVersion": 1,
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
       "position": [
         -1024,
         -592
       ],
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "atJ86VdDoYyS4tiT",
-          "name": "Google Drive account 2"
-        }
-      }
+      "webhookId": "document-analyzer"
     },
     {
       "parameters": {
@@ -57,13 +39,43 @@
             {
               "id": "0f8bc803-94c0-4689-92de-1ae03bc6e1a0",
               "name": "name",
-              "value": "={{ $('File Created').item.json.name }}",
+              "value": "={{ $json.body.file.name }}",
               "type": "string"
             },
             {
               "id": "b215de7b-64c4-4125-8d5e-4445b5a7f85a",
-              "name": "file_id",
-              "value": "={{ $('File Created').item.json.id }}",
+              "name": "file_path",
+              "value": "={{ $json.body.file.path }}",
+              "type": "string"
+            },
+            {
+              "id": "file-size-id",
+              "name": "file_size",
+              "value": "={{ $json.body.file.size }}",
+              "type": "number"
+            },
+            {
+              "id": "mime-type-id",
+              "name": "mime_type",
+              "value": "={{ $json.body.file.mimeType }}",
+              "type": "string"
+            },
+            {
+              "id": "user-id-id",
+              "name": "userId",
+              "value": "={{ $json.body.userId }}",
+              "type": "string"
+            },
+            {
+              "id": "dept-id",
+              "name": "department",
+              "value": "={{ $json.body.department }}",
+              "type": "string"
+            },
+            {
+              "id": "proc-id",
+              "name": "processingId",
+              "value": "={{ $json.body.processingId }}",
               "type": "string"
             }
           ]
@@ -71,7 +83,7 @@
         "options": {}
       },
       "id": "75389b0a-aa20-4ede-b8e0-a1c440abd021",
-      "name": "Set File ID",
+      "name": "Set File Data",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
@@ -81,29 +93,24 @@
     },
     {
       "parameters": {
-        "operation": "download",
-        "fileId": {
-          "__rl": true,
-          "value": "={{ $('Set File ID').item.json.file_id }}",
-          "mode": "id"
+        "url": "=https://api.aidocmanageagent.io.vn/{{ $('Set File Data').item.json.file_path.replace(/^.*\\/uploads\\//, 'uploads/') }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
         },
-        "options": {}
+        "authentication": "none"
       },
       "id": "6df56ba6-d407-4ef4-a642-8d854e58561d",
-      "name": "Download File From Drive",
-      "type": "n8n-nodes-base.googleDrive",
-      "typeVersion": 3,
+      "name": "Download File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         -304,
         -592
-      ],
-      "executeOnce": true,
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "atJ86VdDoYyS4tiT",
-          "name": "Google Drive account 2"
-        }
-      }
+      ]
     },
     {
       "parameters": {
@@ -149,7 +156,7 @@
     {
       "parameters": {
         "folderId": "14faxpPz6EOGRI14HAEgSI85EWpBZrFkX",
-        "title": "={{ $('File Created').item.json.name.replace(/\\.pdf$/i, '') }} PDF Summary"
+        "title": "={{ $('Set File Data').item.json.name.replace(/\\.pdf$/i, '') }} PDF Summary"
       },
       "type": "n8n-nodes-base.googleDocs",
       "typeVersion": 2,
@@ -577,7 +584,7 @@
         ]
       ]
     },
-    "File Created": {
+    "Webhook": {
       "main": [
         [
           {

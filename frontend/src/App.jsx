@@ -103,14 +103,19 @@ function App() {
     formData.append('department', selectedDepartment);
     formData.append('sharingEmails', sharingEmails);
     formData.append('selectedUsers', JSON.stringify(selectedUsers));
+    
+    // Get userId from first selected user, or use a default
+    const userId = selectedUsers.length > 0 ? selectedUsers[0].id : 'default-user';
+    formData.append('userId', userId);
 
       console.log('🚀 Sending request to:', '/api/document/process');
       console.log('📊 Form data:', {
         fileName: file.name,
         fileSize: file.size,
-        userId,
-        department,
-        sharingEmails
+        userId: userId,
+        department: selectedDepartment,
+        sharingEmails: sharingEmails,
+        selectedUsersCount: selectedUsers.length
       });
 
       const response = await fetch('/api/document/process', {

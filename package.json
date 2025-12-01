@@ -2,11 +2,14 @@
   "name": "unified-document-management-agent",
   "version": "1.0.0",
   "description": "Unified Document Management Agent with GDPR compliance",
-  "main": "unified-document-agent.js",
+  "main": "api/unified-document-agent.js",
   "scripts": {
-    "start": "node unified-document-agent.js",
-    "dev": "nodemon unified-document-agent.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node api/unified-document-agent.js",
+    "dev": "nodemon api/unified-document-agent.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:api": "node api/test-api-connection.js",
+    "test:webhook": "node api/test-webhook.js",
+    "test:webhook-status": "node api/check-webhook-status.js"
   },
   "keywords": [
     "document-management",
@@ -18,12 +21,13 @@
   "author": "Document Management Agent Team",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
-    "multer": "^1.4.5-lts.1",
     "axios": "^1.6.0",
     "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.18.2",
     "helmet": "^7.1.0",
-    "morgan": "^1.10.0"
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
