@@ -9,7 +9,9 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:api": "node api/test-api-connection.js",
     "test:webhook": "node api/test-webhook.js",
-    "test:webhook-status": "node api/check-webhook-status.js"
+    "test:webhook-status": "node api/check-webhook-status.js",
+    "cloudinary:upload": "node api/cloudinary-upload.js",
+    "cloudinary:download": "node api/cloudinary-download.js"
   },
   "keywords": [
     "document-management",
@@ -22,6 +24,7 @@
   "license": "MIT",
   "dependencies": {
     "axios": "^1.6.0",
+    "cloudinary": "^1.41.3",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^4.18.2",

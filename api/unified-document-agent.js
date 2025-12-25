@@ -35,6 +35,18 @@ const express = require('express');
 const multer = require('multer');
 const axios = require('axios');
 const fs = require('fs');
+const cloudinary = require('cloudinary').v2;
+const { uploadFileToCloudinary } = require('./cloudinary-upload');
+const { downloadFileFromCloudinary, downloadFileFromCloudinaryUrl } = require('./cloudinary-download');
+
+// Configure Cloudinary (đã được config trong cloudinary-upload, nhưng cần config lại để tạo signed URL)
+if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+  });
+}
 
 const app = express();
 const PORT = 5000;
@@ -337,28 +349,180 @@ app.post('/api/document/process', upload.single('file'), async (req, res) => {
       }
     }
     
-    // Prepare file path for webhook (relative path from uploads folder)
-    const fileName = path.basename(file.path);
-    const fileUrl = `https://api.aidocmanageagent.io.vn/uploads/${fileName}`;
+    // Step 1.5: Upload file to Cloudinary (BẮT BUỘC)
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`📤 [CLOUDINARY] Uploading file to Cloudinary for ${processingId}...`);
+    console.log(`   File: ${file.originalname}`);
+    console.log(`   Size: ${file.size} bytes`);
+    console.log(`   Path: ${file.path}`);
+    console.log(`   File exists: ${fs.existsSync(file.path)}`);
     
+    let cloudinaryResult = null;
+    let cloudinaryUrl = null;
+    let cloudinaryPublicId = null;
+    
+    try {
+      console.log(`   [CLOUDINARY] Calling uploadFileToCloudinary...`);
+      cloudinaryResult = await uploadFileToCloudinary(
+        file.path,
+        processingId,
+        file.originalname
+      );
+      
+      console.log(`   [CLOUDINARY] Upload result:`, JSON.stringify({
+        success: cloudinaryResult?.success,
+        has_secure_url: !!cloudinaryResult?.secure_url,
+        has_public_id: !!cloudinaryResult?.public_id
+      }, null, 2));
+      
+      if (!cloudinaryResult) {
+        throw new Error('Cloudinary upload returned null/undefined');
+      }
+      
+      if (!cloudinaryResult.secure_url) {
+        console.error(`   [CLOUDINARY] Result:`, JSON.stringify(cloudinaryResult, null, 2));
+        throw new Error('Cloudinary upload returned invalid result - no secure_url');
+      }
+      
+      cloudinaryUrl = cloudinaryResult.secure_url;
+      cloudinaryPublicId = cloudinaryResult.public_id;
+      
+      console.log(`✅ [CLOUDINARY] File uploaded successfully!`);
+      console.log(`   Public ID: ${cloudinaryPublicId}`);
+      console.log(`   URL: ${cloudinaryUrl}`);
+      console.log(`   Resource Type: ${cloudinaryResult.resource_type || 'N/A'}`);
+      console.log(`   Format: ${cloudinaryResult.format || 'N/A'}`);
+      console.log(`   Bytes: ${cloudinaryResult.bytes || 'N/A'}`);
+      console.log(`   Access Mode: ${cloudinaryResult.access_mode || 'public (default)'}`);
+      console.log(`   URL contains 'cloudinary.com': ${cloudinaryUrl.includes('cloudinary.com')}`);
+      
+      // Verify resource_type is correct for PDFs
+      const isPdf = file.originalname.toLowerCase().endsWith('.pdf');
+      if (isPdf && cloudinaryResult.resource_type !== 'raw') {
+        console.warn(`⚠️  WARNING: PDF file uploaded with resource_type "${cloudinaryResult.resource_type}" instead of "raw"`);
+      }
+      
+      // Update processing status with Cloudinary info
+      const currentStatus = processingStatus.get(processingId);
+      if (currentStatus) {
+        currentStatus.cloudinaryUrl = cloudinaryUrl;
+        currentStatus.cloudinaryPublicId = cloudinaryPublicId;
+        currentStatus.cloudinaryResourceType = cloudinaryResult.resource_type || 'raw';
+        processingStatus.set(processingId, currentStatus);
+      }
+      
+    } catch (cloudinaryError) {
+      console.error(`\n${'='.repeat(60)}`);
+      console.error(`❌ [CLOUDINARY] CRITICAL ERROR: Failed to upload file to Cloudinary!`);
+      console.error(`   Error message: ${cloudinaryError.message}`);
+      console.error(`   Error stack: ${cloudinaryError.stack}`);
+      console.error(`   File path: ${file.path}`);
+      console.error(`   File exists: ${fs.existsSync(file.path)}`);
+      console.error(`${'='.repeat(60)}\n`);
+      
+      // KHÔNG tiếp tục với local URL - throw error để frontend biết
+      return res.status(500).json({ 
+        error: 'Failed to upload file to Cloudinary',
+        message: cloudinaryError.message,
+        processingId: processingId,
+        details: cloudinaryError.stack
+      });
+    }
+    
+    // Đảm bảo có Cloudinary URL trước khi tiếp tục
+    if (!cloudinaryUrl) {
+      console.error(`\n${'='.repeat(60)}`);
+      console.error(`❌ [CLOUDINARY] CRITICAL: Cloudinary URL is missing after upload!`);
+      console.error(`   cloudinaryResult:`, JSON.stringify(cloudinaryResult, null, 2));
+      console.error(`${'='.repeat(60)}\n`);
+      return res.status(500).json({ 
+        error: 'Cloudinary URL is missing after upload',
+        processingId: processingId
+      });
+    }
+    
+    // Verify URL format
+    if (!cloudinaryUrl.includes('cloudinary.com')) {
+      console.error(`\n${'='.repeat(60)}`);
+      console.error(`❌ [CLOUDINARY] CRITICAL: Cloudinary URL format is invalid!`);
+      console.error(`   URL: ${cloudinaryUrl}`);
+      console.error(`${'='.repeat(60)}\n`);
+      return res.status(500).json({ 
+        error: 'Invalid Cloudinary URL format',
+        url: cloudinaryUrl,
+        processingId: processingId
+      });
+    }
+    
+    console.log(`${'='.repeat(60)}\n`);
+    
+    // Tạo signed URL cho n8n để download (tránh lỗi 401)
+    // QUAN TRỌNG: Phải dùng đúng resource_type từ upload result
+    let downloadUrl = cloudinaryUrl; // Default dùng unsigned URL
+    try {
+      // Lấy resource_type từ upload result (fallback về 'raw' nếu không có)
+      const actualResourceType = cloudinaryResult?.resource_type || 'raw';
+      
+      console.log(`   Creating signed URL with resource_type: ${actualResourceType}`);
+      console.log(`   Public ID: ${cloudinaryPublicId}`);
+      
+      const signedUrl = cloudinary.url(cloudinaryPublicId, {
+        resource_type: actualResourceType, // Dùng resource_type từ upload result
+        secure: true,
+        sign_url: true, // Signed URL để bypass access control
+        type: 'upload' // Đảm bảo là upload type
+      });
+      
+      downloadUrl = signedUrl;
+      console.log(`✅ Created signed URL for n8n download`);
+      console.log(`   Resource Type: ${actualResourceType}`);
+      console.log(`   Signed URL: ${signedUrl.substring(0, 100)}...`);
+      
+      // Verify signed URL format
+      if (!signedUrl.includes('cloudinary.com')) {
+        console.warn(`⚠️  Signed URL format seems invalid, using unsigned URL`);
+        downloadUrl = cloudinaryUrl;
+      }
+    } catch (signError) {
+      console.warn(`⚠️  Could not create signed URL, using unsigned URL: ${signError.message}`);
+      console.warn(`   Error details:`, signError);
+      // Fallback to unsigned URL
+      downloadUrl = cloudinaryUrl;
+    }
+    
+    // Prepare file data for webhook
     const analysisData = {
       file: {
         name: file.originalname,
         size: file.size,
         mimeType: file.mimetype,
-        path: file.path,
-        url: fileUrl  // Add URL for N8N to download
+        url: downloadUrl,  // Dùng signed URL cho n8n download
+        cloudinary_url: downloadUrl,  // Signed URL (tránh 401)
+        cloudinary_public_id: cloudinaryPublicId,  // Public ID để dự phòng
+        cloudinary_unsigned_url: cloudinaryUrl  // Giữ unsigned URL để reference
       },
       userId: userId,
       department: department,
       processingId: processingId
     };
 
+    // Verify Cloudinary URL is valid before sending
+    if (!analysisData.file.cloudinary_url || !analysisData.file.cloudinary_url.includes('cloudinary.com')) {
+      console.error(`❌ CRITICAL: Invalid Cloudinary URL!`);
+      console.error(`   URL: ${analysisData.file.cloudinary_url}`);
+      return res.status(500).json({ 
+        error: 'Invalid Cloudinary URL',
+        processingId: processingId
+      });
+    }
+    
     console.log(`📋 Sending data to webhook:`, {
       processingId: analysisData.processingId,
       fileName: analysisData.file.name,
       fileSize: analysisData.file.size,
       fileUrl: analysisData.file.url,
+      cloudinary_url: analysisData.file.cloudinary_url,
+      cloudinary_public_id: analysisData.file.cloudinary_public_id,
       userId: analysisData.userId,
       department: analysisData.department
     });
@@ -497,6 +661,10 @@ app.post('/api/document/process', upload.single('file'), async (req, res) => {
         
         processingStatus.get(processingId).steps.analysis = 'completed';
         processingStatus.get(processingId).results.analysis = analysisResponse.data;
+        // Lưu docx_url nếu có trong response
+        if (analysisResponse.data && analysisResponse.data.docx_url) {
+          processingStatus.get(processingId).docx_url = analysisResponse.data.docx_url;
+        }
         processingStatus.get(processingId).updatedAt = new Date().toISOString();
       } else {
         console.warn(`⚠️ Webhook returned status ${analysisResponse.status} for ${processingId}`);
@@ -600,7 +768,11 @@ app.get('/api/document/status/:processingId', (req, res) => {
     return res.status(404).json({ error: 'Processing ID not found' });
   }
   
-  res.json(status);
+  // Trả về status với docx_url nếu có
+  res.json({
+    ...status,
+    docx_url: status.docx_url || null
+  });
 });
 
 // Get All Processing Status
@@ -800,13 +972,310 @@ app.get('/api/n8n/workflows/:id/status', async (req, res) => {
 });
 
 // Webhook endpoints to receive results from N8N flows
+// ============================================
+// Cloudinary File Upload/Download Endpoints
+// ============================================
+
+/**
+ * POST /api/cloudinary/upload
+ * Upload file to Cloudinary
+ * Body: multipart/form-data with 'file' field
+ * Optional: processingId, fileName
+ */
+app.post('/api/cloudinary/upload', upload.single('file'), async (req, res) => {
+  try {
+    const file = req.file;
+    const { processingId, fileName } = req.body;
+    
+    if (!file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    
+    // Generate processing ID if not provided
+    const procId = processingId || `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const fileNm = fileName || file.originalname;
+    
+    console.log(`📤 Uploading file to Cloudinary via API...`);
+    console.log(`   Processing ID: ${procId}`);
+    console.log(`   File: ${fileNm}`);
+    
+    const result = await uploadFileToCloudinary(
+      file.path,
+      procId,
+      fileNm
+    );
+    
+    // Clean up local file after upload
+    try {
+      fs.unlinkSync(file.path);
+      console.log(`🗑️  Local file deleted: ${file.path}`);
+    } catch (unlinkError) {
+      console.warn(`⚠️  Could not delete local file: ${unlinkError.message}`);
+    }
+    
+    res.json({
+      success: true,
+      processingId: procId,
+      fileName: fileNm,
+      cloudinary: {
+        public_id: result.public_id,
+        secure_url: result.secure_url,
+        url: result.url,
+        bytes: result.bytes,
+        format: result.format,
+        resource_type: result.resource_type,
+        created_at: result.created_at
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error uploading to Cloudinary:', error);
+    res.status(500).json({
+      error: 'Failed to upload file to Cloudinary',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/cloudinary/download/:publicId
+ * Download file from Cloudinary by public_id
+ * Query params: ?format=pdf (optional)
+ */
+app.get('/api/cloudinary/download/:publicId(*)', async (req, res) => {
+  try {
+    const publicId = req.params.publicId;
+    
+    if (!publicId) {
+      return res.status(400).json({ error: 'Public ID is required' });
+    }
+    
+    console.log(`📥 Downloading file from Cloudinary via API...`);
+    console.log(`   Public ID: ${publicId}`);
+    
+    const result = await downloadFileFromCloudinary(publicId);
+    
+    // Determine content type
+    const contentType = result.format === 'pdf' 
+      ? 'application/pdf' 
+      : (result.format ? `application/${result.format}` : 'application/octet-stream');
+    
+    // Set headers
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${publicId.split('/').pop()}"`);
+    res.setHeader('Content-Length', result.size);
+    
+    // Send file buffer
+    res.send(result.buffer);
+    
+  } catch (error) {
+    console.error('❌ Error downloading from Cloudinary:', error);
+    
+    if (error.message.includes('not found')) {
+      return res.status(404).json({
+        error: 'File not found',
+        message: error.message
+      });
+    }
+    
+    res.status(500).json({
+      error: 'Failed to download file from Cloudinary',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/cloudinary/download-url
+ * Download file from Cloudinary by URL
+ * Query params: ?url=<cloudinary_url>
+ */
+app.get('/api/cloudinary/download-url', async (req, res) => {
+  try {
+    const { url } = req.query;
+    
+    if (!url) {
+      return res.status(400).json({ error: 'URL parameter is required' });
+    }
+    
+    console.log(`📥 Downloading file from Cloudinary URL via API...`);
+    console.log(`   URL: ${url}`);
+    
+    const result = await downloadFileFromCloudinaryUrl(url);
+    
+    // Determine content type from URL or default to PDF
+    const contentType = url.includes('.pdf') 
+      ? 'application/pdf' 
+      : 'application/octet-stream';
+    
+    // Set headers
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="file.${url.split('.').pop()}"`);
+    res.setHeader('Content-Length', result.size);
+    
+    // Send file buffer
+    res.send(result.buffer);
+    
+  } catch (error) {
+    console.error('❌ Error downloading from Cloudinary URL:', error);
+    
+    if (error.message.includes('not found')) {
+      return res.status(404).json({
+        error: 'File not found',
+        message: error.message
+      });
+    }
+    
+    res.status(500).json({
+      error: 'Failed to download file from Cloudinary',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/cloudinary/view/:publicId
+ * View/display file from Cloudinary inline (for PDF viewing in browser)
+ */
+app.get('/api/cloudinary/view/:publicId(*)', async (req, res) => {
+  try {
+    const publicId = req.params.publicId;
+    
+    if (!publicId) {
+      return res.status(400).json({ error: 'Public ID is required' });
+    }
+    
+    console.log(`👁️  Viewing file from Cloudinary via API...`);
+    console.log(`   Public ID: ${publicId}`);
+    
+    const result = await downloadFileFromCloudinary(publicId);
+    
+    // Determine content type
+    const contentType = result.format === 'pdf' 
+      ? 'application/pdf' 
+      : (result.format ? `application/${result.format}` : 'application/octet-stream');
+    
+    // Set headers for inline display (not download)
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `inline; filename="${publicId.split('/').pop()}"`);
+    res.setHeader('Content-Length', result.size);
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+    
+    // Send file buffer
+    res.send(result.buffer);
+    
+  } catch (error) {
+    console.error('❌ Error viewing from Cloudinary:', error);
+    
+    if (error.message.includes('not found')) {
+      return res.status(404).json({
+        error: 'File not found',
+        message: error.message
+      });
+    }
+    
+    res.status(500).json({
+      error: 'Failed to view file from Cloudinary',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/cloudinary/view-url
+ * View/display file from Cloudinary URL inline
+ * Query params: ?url=<cloudinary_url>
+ */
+app.get('/api/cloudinary/view-url', async (req, res) => {
+  try {
+    const { url } = req.query;
+    
+    if (!url) {
+      return res.status(400).json({ error: 'URL parameter is required' });
+    }
+    
+    console.log(`👁️  Viewing file from Cloudinary URL via API...`);
+    console.log(`   URL: ${url}`);
+    
+    const result = await downloadFileFromCloudinaryUrl(url);
+    
+    // Determine content type from URL or default to PDF
+    const contentType = url.includes('.pdf') 
+      ? 'application/pdf' 
+      : 'application/octet-stream';
+    
+    // Set headers for inline display (not download)
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `inline; filename="${url.split('/').pop()}"`);
+    res.setHeader('Content-Length', result.size);
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+    
+    // Send file buffer
+    res.send(result.buffer);
+    
+  } catch (error) {
+    console.error('❌ Error viewing from Cloudinary URL:', error);
+    
+    if (error.message.includes('not found')) {
+      return res.status(404).json({
+        error: 'File not found',
+        message: error.message
+      });
+    }
+    
+    res.status(500).json({
+      error: 'Failed to view file from Cloudinary',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/cloudinary/info/:publicId
+ * Get file information from Cloudinary
+ */
+app.get('/api/cloudinary/info/:publicId(*)', async (req, res) => {
+  try {
+    const publicId = req.params.publicId;
+    
+    if (!publicId) {
+      return res.status(400).json({ error: 'Public ID is required' });
+    }
+    
+    const { getFileInfoFromCloudinary } = require('./cloudinary-download');
+    const info = await getFileInfoFromCloudinary(publicId);
+    
+    res.json({
+      success: true,
+      info: info
+    });
+    
+  } catch (error) {
+    console.error('❌ Error getting file info:', error);
+    res.status(500).json({
+      error: 'Failed to get file information',
+      message: error.message
+    });
+  }
+});
+
+// ============================================
+// Webhook Endpoints
+// ============================================
+
 app.post('/webhook/flow1-result', (req, res) => {
-  const { processingId, results } = req.body;
+  const { processingId, results, docx_url } = req.body;
   console.log(`Received Flow 1 results for ${processingId}`);
+  console.log(`DOCX URL: ${docx_url || 'not provided'}`);
   
   if (processingStatus.has(processingId)) {
     processingStatus.get(processingId).results.analysis = results;
     processingStatus.get(processingId).steps.analysis = 'completed';
+    // Lưu docx_url nếu có
+    if (docx_url) {
+      processingStatus.get(processingId).docx_url = docx_url;
+      console.log(`✅ Saved DOCX URL for ${processingId}: ${docx_url}`);
+    }
     processingStatus.get(processingId).updatedAt = new Date().toISOString();
   }
   

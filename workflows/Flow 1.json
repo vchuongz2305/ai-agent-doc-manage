@@ -1,171 +1,273 @@
 {
-  "name": "Dang Hong Nguyen - Analyze document",
+  "name": "Test 2",
   "nodes": [
     {
       "parameters": {
-        "operation": "pdf",
+        "jsCode": "// Lấy kết quả từ Upload DOCX node\nconst uploadResult = $json;\n\n// Extract docx_url từ response\nlet docxUrl = '';\n\ntry {\n  if (uploadResult.cloudinary && uploadResult.cloudinary.secure_url) {\n    docxUrl = uploadResult.cloudinary.secure_url;\n  } else if (uploadResult.secure_url) {\n    docxUrl = uploadResult.secure_url;\n  } else if (uploadResult.url) {\n    docxUrl = uploadResult.url;\n  }\n  \n  console.log('DOCX URL from Cloudinary:', docxUrl);\n} catch (error) {\n  console.error('Error extracting DOCX URL:', error);\n}\n\n// Lấy data từ Aggregate node (chứa analysis results)\nconst aggregateData = $('Aggregate').item.json || {};\n\n// Merge với docx_url\nreturn [{\n  json: {\n    ...aggregateData,\n    docx_url: docxUrl\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1072,
+        816
+      ],
+      "id": "3914e249-fe6d-4e3d-955b-accb3b60a781",
+      "name": "Extract DOCX URL"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://localhost:5000/api/cloudinary/upload",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "processingId",
+              "value": "={{ $('Set File Data').item.json.processingId }}"
+            },
+            {
+              "name": "fileName",
+              "value": "={{ $('Set File Data').item.json.name.replace(/\\.pdf$/i, '') }}_Analysis.docx"
+            }
+          ]
+        },
         "options": {}
       },
-      "id": "6e758e24-18cf-479e-a711-2d3f20f0fb6c",
-      "name": "Extract PDF Text",
-      "type": "n8n-nodes-base.extractFromFile",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
-        -48,
-        -592
-      ]
+        1072,
+        592
+      ],
+      "id": "4cb31a84-f58c-4f8e-9b26-3e8f4cb5e5e4",
+      "name": "Upload DOCX to Cloudinary"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Google Docs').item.json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1936,
+        432
+      ],
+      "id": "35ae9873-d7a5-496f-bd57-6c8c7f7db53b",
+      "name": "Export Google Docs to DOCX",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "atJ86VdDoYyS4tiT",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": true, \"processingId\": $('Set File Data').item.json.processingId, \"message\": \"Document analysis completed\", \"docx_url\": $json.docx_url || '' } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1760,
+        816
+      ],
+      "id": "1e89f6aa-c1a7-40c0-9969-77be9d1a497b",
+      "name": "Respond to Webhook"
     },
     {
       "parameters": {
         "httpMethod": "POST",
         "path": "document-analyzer",
         "responseMode": "responseNode",
-        "options": {}
+        "options": {
+          "rawBody": true
+        }
       },
-      "id": "813f3e20-aed6-4c4f-81f8-8c2d78060d39",
-      "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1.1,
+      "typeVersion": 2.1,
       "position": [
-        -1024,
-        -592
+        -464,
+        32
       ],
-      "webhookId": "document-analyzer"
+      "id": "53096178-9aa4-40a8-8c11-ccb8ffcf4531",
+      "name": "Webhook",
+      "webhookId": "8c724e88-5a5d-4919-82ba-760f48bf341f"
     },
     {
       "parameters": {
-        "assignments": {
-          "assignments": [
+        "operation": "move",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Google Docs').item.json.id }}",
+          "mode": "id"
+        },
+        "driveId": {
+          "__rl": true,
+          "value": "My Drive",
+          "mode": "list",
+          "cachedResultName": "My Drive",
+          "cachedResultUrl": "https://drive.google.com/drive/my-drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "14faxpPz6EOGRI14HAEgSI85EWpBZrFkX",
+          "mode": "list",
+          "cachedResultName": "PDF Folder",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/14faxpPz6EOGRI14HAEgSI85EWpBZrFkX"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1536,
+        816
+      ],
+      "id": "f03ca422-7bda-4584-a527-f75e592ba1aa",
+      "name": "Google Drive1",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "atJ86VdDoYyS4tiT",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Delay 5 giây trước khi gọi Gemini API để tránh rate limit\nconsole.log('⏳ Waiting 5 seconds before AI call...');\nawait new Promise(resolve => setTimeout(resolve, 5000));\nconsole.log('✅ Wait completed, proceeding to AI node');\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        848,
+        -48
+      ],
+      "id": "31eb2b81-8d71-4df1-9021-3c5e7676bf6f",
+      "name": "Wait Before AI"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse kết quả từ comprehensive_analysis node\nconst aiResult = $json.output || $json;\n\nconsole.log('Raw AI Result:', JSON.stringify(aiResult, null, 2));\n\n// Parse và format giống như 6 node cũ để tương thích với Merge node\nlet parsed = {};\n\ntry {\n  // Nếu AI trả về string, parse JSON\n  let parsedData = aiResult;\n  if (typeof aiResult === 'string') {\n    // Loại bỏ markdown code blocks nếu có\n    const cleanJson = aiResult\n      .replace(/```json/gi, '')\n      .replace(/```/g, '')\n      .trim();\n    \n    // Tìm JSON trong string\n    const jsonMatch = cleanJson.match(/\\{[\\s\\S]*\\}/);\n    if (jsonMatch) {\n      parsedData = JSON.parse(jsonMatch[0]);\n    } else {\n      parsedData = JSON.parse(cleanJson);\n    }\n  }\n  \n  // Format để tương thích với Merge node\n  parsed = {\n    // main_theme format\n    main_theme: {\n      output: {\n        main_theme: parsedData.main_theme || \"\"\n      }\n    },\n    \n    // document_summary format\n    document_summary: {\n      output: {\n        document_summary: Array.isArray(parsedData.document_summary) \n          ? parsedData.document_summary \n          : []\n      }\n    },\n    \n    // key_takeaways format\n    key_takeaways: {\n      output: {\n        key_takeaways: Array.isArray(parsedData.key_takeaways) \n          ? parsedData.key_takeaways \n          : []\n      }\n    },\n    \n    // gaps_and_limitations format\n    gaps_and_limitations: {\n      output: {\n        gaps_and_limitations: Array.isArray(parsedData.gaps_and_limitations) \n          ? parsedData.gaps_and_limitations \n          : []\n      }\n    },\n    \n    // follow_up_questions format\n    follow_up_questions: {\n      output: {\n        follow_up_questions: Array.isArray(parsedData.follow_up_questions) \n          ? parsedData.follow_up_questions \n          : []\n      }\n    },\n    \n    // terminology_to_clarify format\n    terminology_to_clarify: {\n      output: {\n        terminology_to_clarify: Array.isArray(parsedData.terminology_to_clarify) \n          ? parsedData.terminology_to_clarify \n          : []\n      }\n    }\n  };\n  \n  console.log('Parsed Result:', JSON.stringify(parsed, null, 2));\n  \n} catch (error) {\n  console.error('Error parsing AI result:', error);\n  console.error('Raw data:', aiResult);\n  \n  // Fallback với empty data\n  parsed = {\n    main_theme: { output: { main_theme: \"Error parsing AI result\" } },\n    document_summary: { output: { document_summary: [] } },\n    key_takeaways: { output: { key_takeaways: [] } },\n    gaps_and_limitations: { output: { gaps_and_limitations: [] } },\n    follow_up_questions: { output: { follow_up_questions: [] } },\n    terminology_to_clarify: { output: { terminology_to_clarify: [] } }\n  };\n}\n\n// Return format tương thích với Merge node\nreturn [{\n  json: {\n    name: $('Set File Data').item.json.name,\n    main_theme: parsed.main_theme,\n    document_summary: parsed.document_summary,\n    key_takeaways: parsed.key_takeaways,\n    gaps_and_limitations: parsed.gaps_and_limitations,\n    follow_up_questions: parsed.follow_up_questions,\n    terminology_to_clarify: parsed.terminology_to_clarify\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1392,
+        -64
+      ],
+      "id": "ea594fef-49b6-42c4-bfe6-50873efdc028",
+      "name": "Parse Combined Result"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=**Document Title:** {{ $('Set File Data').item.json.name }}\n\n**Document Text:** {{ $json.text }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=YOU ARE A COMPREHENSIVE DOCUMENT ANALYSIS AGENT. YOU MUST ANALYZE A DOCUMENT AND OUTPUT ALL ANALYSIS RESULTS IN A SINGLE JSON OBJECT.\n\nYOUR TASK:\n1. Identify the main theme and purpose\n2. Create a section-by-section summary\n3. Extract key takeaways\n4. Identify gaps and limitations\n5. Generate follow-up questions\n6. Clarify terminology\n\nOUTPUT FORMAT (MANDATORY JSON):\n{\n  \"main_theme\": \"Three sentences: topic, purpose, audience\",\n  \"document_summary\": [\n    {\n      \"section_title\": \"Section title\",\n      \"content\": \"Section summary\"\n    }\n  ],\n  \"key_takeaways\": [\n    {\n      \"point\": \"Key point\",\n      \"context\": \"Explanation\"\n    }\n  ],\n  \"gaps_and_limitations\": [\n    {\n      \"issue\": \"Gap description\",\n      \"reason\": \"Why it matters\"\n    }\n  ],\n  \"follow_up_questions\": [\n    \"Question 1\",\n    \"Question 2\"\n  ],\n  \"terminology_to_clarify\": [\n    {\n      \"term\": \"Term\",\n      \"explanation\": \"Definition\"\n    }\n  ]\n}\n\nREQUIREMENTS:\n- Return ONLY valid JSON, no markdown code blocks (no ```json)\n- All fields are required\n- Be specific and accurate\n- main_theme: 3 sentences (topic, purpose, audience)\n- document_summary: Array of sections with title and content\n- key_takeaways: 3-7 items with point and context\n- gaps_and_limitations: 1-5 items with issue and reason\n- follow_up_questions: 3-7 open-ended questions\n- terminology_to_clarify: Array of terms with explanations\n\nIMPORTANT:\n- Do NOT wrap output in markdown code blocks\n- Output must be valid JSON that can be parsed directly\n- All arrays must have at least 1 item\n- Be concise but informative"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        1056,
+        -32
+      ],
+      "id": "ae7d3a51-193d-4d0c-987f-b4e22164dd1a",
+      "name": "comprehensive_analysis",
+      "settings": {
+        "errorHandling": {
+          "retry": {
+            "enabled": true,
+            "maxRetries": 5,
+            "retryDelay": 10000
+          }
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO documents (processing_id, file_name, file_url, user_id, department, status, analysis_results, cloudinary_url, docx_url, created_at, updated_at, analysis_completed_at) VALUES ('{{ $('Set File Data').item.json.processingId }}', '{{ $('Set File Data').item.json.name }}', '{{ $('Set File Data').item.json.file_url }}', '{{ $('Set File Data').item.json.userId }}', '{{ $('Set File Data').item.json.department }}', 'completed', '{{ JSON.stringify($json).replace(/'/g, \"''\") }}'::jsonb, '{{ $('Set File Data').item.json.cloudinary_url || $('Set File Data').item.json.file_url }}', '{{ $json.docx_url || '' }}', NOW(), NOW(), NOW()) ON CONFLICT (processing_id) DO UPDATE SET status = 'completed', analysis_results = EXCLUDED.analysis_results, cloudinary_url = EXCLUDED.cloudinary_url, docx_url = COALESCE(NULLIF(EXCLUDED.docx_url, ''), documents.docx_url), updated_at = NOW(), analysis_completed_at = NOW() RETURNING *;",
+        "options": {}
+      },
+      "id": "baa0477a-26b7-40ce-a9db-4f54746cdedb",
+      "name": "Save Analysis to Postgres",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1312,
+        816
+      ]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1072,
+        432
+      ],
+      "id": "bee71b43-4e5c-43b4-884a-17114ca74652",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "numberInputs": 1
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        816,
+        352
+      ],
+      "id": "e19204fd-b293-492d-b7c4-0ea85e16d557",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"main_theme\": \"Three sentences: topic, purpose, audience\",\n  \"document_summary\": [\n    {\n      \"section_title\": \"Section title\",\n      \"content\": \"Section summary\"\n    }\n  ],\n  \"key_takeaways\": [\n    {\n      \"point\": \"Key point\",\n      \"context\": \"Explanation\"\n    }\n  ],\n  \"gaps_and_limitations\": [\n    {\n      \"issue\": \"Gap description\",\n      \"reason\": \"Why it matters\"\n    }\n  ],\n  \"follow_up_questions\": [\n    \"Question 1\",\n    \"Question 2\"\n  ],\n  \"terminology_to_clarify\": [\n    {\n      \"term\": \"Term\",\n      \"explanation\": \"Definition\"\n    }\n  ]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1216,
+        -176
+      ],
+      "id": "7857814f-657f-44da-875f-712370038580",
+      "name": "Structured Output Parser - Comprehensive"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentURL": "={{ $('Google Docs').item.json.id }}",
+        "actionsUi": {
+          "actionFields": [
             {
-              "id": "0f8bc803-94c0-4689-92de-1ae03bc6e1a0",
-              "name": "name",
-              "value": "={{ $json.body.file.name }}",
-              "type": "string"
-            },
-            {
-              "id": "b215de7b-64c4-4125-8d5e-4445b5a7f85a",
-              "name": "file_path",
-              "value": "={{ $json.body.file.path }}",
-              "type": "string"
-            },
-            {
-              "id": "file-size-id",
-              "name": "file_size",
-              "value": "={{ $json.body.file.size }}",
-              "type": "number"
-            },
-            {
-              "id": "mime-type-id",
-              "name": "mime_type",
-              "value": "={{ $json.body.file.mimeType }}",
-              "type": "string"
-            },
-            {
-              "id": "user-id-id",
-              "name": "userId",
-              "value": "={{ $json.body.userId }}",
-              "type": "string"
-            },
-            {
-              "id": "dept-id",
-              "name": "department",
-              "value": "={{ $json.body.department }}",
-              "type": "string"
-            },
-            {
-              "id": "proc-id",
-              "name": "processingId",
-              "value": "={{ $json.body.processingId }}",
-              "type": "string"
+              "action": "insert",
+              "text": "={{ $json.name }}\n\n\n{{ $json.main_theme.output.main_theme }}\n\n{{ $json.document_summary.output.document_summary.map(section => `📌 ${section.section_title}:\\n${section.content}`).join('\\n\\n') }}\n\n\n---\n\n\nKey Takeaways\n\n{{ \n  $json.key_takeaways.output.key_takeaways\n    .map(takeaway => `- ${takeaway.point}:\\n${takeaway.context}`)\n    .join('\\n\\n') \n}}\n\n\n---\n\n\nGaps & Limitations\n\n{{ \n  $json.gaps_and_limitations.output.gaps_and_limitations\n    .map(gap => `- ${gap.issue}:\\n${gap.reason}`)\n    .join('\\n\\n') \n}}\n\n\n\n---\n\n\nFollow-Up Questions\n\n{{ \n  $json.follow_up_questions.output.follow_up_questions\n    .map(question => `?? ${question}`)\n    .join('\\n\\n') \n}}\n\n\n---\n\n\nTerminology To Clarify\n\n{{ \n  $json.terminology_to_clarify.output.terminology_to_clarify\n    .map(entry => `- ${entry.term}:\\n${entry.explanation}`)\n    .join('\\n\\n') \n}}"
             }
           ]
-        },
-        "options": {}
-      },
-      "id": "75389b0a-aa20-4ede-b8e0-a1c440abd021",
-      "name": "Set File Data",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [
-        -688,
-        -512
-      ]
-    },
-    {
-      "parameters": {
-        "url": "=https://api.aidocmanageagent.io.vn/{{ $('Set File Data').item.json.file_path.replace(/^.*\\/uploads\\//, 'uploads/') }}",
-        "options": {
-          "response": {
-            "response": {
-              "responseFormat": "file"
-            }
-          }
-        },
-        "authentication": "none"
-      },
-      "id": "6df56ba6-d407-4ef4-a642-8d854e58561d",
-      "name": "Download File",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        -304,
-        -592
-      ]
-    },
-    {
-      "parameters": {
-        "options": {}
-      },
-      "type": "n8n-nodes-base.splitInBatches",
-      "typeVersion": 3,
-      "position": [
-        -832,
-        -592
-      ],
-      "id": "e0fe9ad1-0bc8-4ee3-b6f5-98a8f09d559e",
-      "name": "Loop Over Items"
-    },
-    {
-      "parameters": {
-        "options": {}
-      },
-      "type": "n8n-nodes-base.splitInBatches",
-      "typeVersion": 3,
-      "position": [
-        -512,
-        -672
-      ],
-      "id": "e203f92c-434c-4bc1-b0d3-043d74d89de6",
-      "name": "2nd Loop Over Items"
-    },
-    {
-      "parameters": {
-        "content": "# The PDF Summarizer\n## Automate Business AI\n### By Bradford Carlton",
-        "height": 220,
-        "width": 540
-      },
-      "type": "n8n-nodes-base.stickyNote",
-      "position": [
-        -480,
-        -1056
-      ],
-      "typeVersion": 1,
-      "id": "aed135ac-69be-49b0-896c-a737c9688b6c",
-      "name": "Sticky Note4"
-    },
-    {
-      "parameters": {
-        "folderId": "14faxpPz6EOGRI14HAEgSI85EWpBZrFkX",
-        "title": "={{ $('Set File Data').item.json.name.replace(/\\.pdf$/i, '') }} PDF Summary"
+        }
       },
       "type": "n8n-nodes-base.googleDocs",
       "typeVersion": 2,
       "position": [
-        1648,
-        -608
+        1744,
+        432
       ],
-      "id": "d2b36343-f043-4c92-be02-35a9f7ac6cf7",
-      "name": "Google Docs",
+      "id": "4f33ed48-8ae3-458c-b8d3-ae8170d8f48d",
+      "name": "Google Docs1",
       "credentials": {
         "googleDocsOAuth2Api": {
           "id": "1amL3txBes4rtT8G",
@@ -199,10 +301,10 @@
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        1856,
-        -608
+        1520,
+        432
       ],
-      "id": "9932f7c9-223f-469b-a6fd-461fb34a0471",
+      "id": "45288500-fc66-4bfd-bea2-2bf2bd055ada",
       "name": "Google Drive",
       "credentials": {
         "googleDriveOAuth2Api": {
@@ -213,25 +315,17 @@
     },
     {
       "parameters": {
-        "operation": "update",
-        "documentURL": "={{ $('Google Docs').item.json.id }}",
-        "actionsUi": {
-          "actionFields": [
-            {
-              "action": "insert",
-              "text": "={{ $json.name }}\n\n\n{{ $('main_theme').item.json.output.main_theme }}\n\n{{ $('document_summary').item.json.output.document_summary.map(section => `📌 ${section.section_title}:\\n${section.content}`).join('\\n\\n') }}\n\n\n---\n\n\nKey Takeaways\n\n{{ \n  $('key_takeaways').item.json.output.key_takeaways\n    .map(takeaway => `- ${takeaway.point}:\\n${takeaway.context}`)\n    .join('\\n\\n') \n}}\n\n\n---\n\n\nGaps & Limitations\n\n{{ \n  $('gaps_and_limitations').item.json.output.gaps_and_limitations\n    .map(gap => `- ${gap.issue}:\\n${gap.reason}`)\n    .join('\\n\\n') \n}}\n\n\n\n---\n\n\nFollow-Up Questions\n\n{{ \n  $('follow_up_questions').item.json.output.follow_up_questions\n    .map(question => `?? ${question}`)\n    .join('\\n\\n') \n}}\n\n\n---\n\n\nTerminology To Clarify\n\n{{ \n  $('terminology_to_clarify').item.json.output.terminology_to_clarify\n    .map(entry => `- ${entry.term}:\\n${entry.explanation}`)\n    .join('\\n\\n') \n}}\n\n\n---\n\n\nDocument Structural Observations\n\n{{ \n  $('structural_observations').item.json.output.structural_observations\n    .map(obs => `- ${obs}`)\n    .join('\\n\\n') \n}}"
-            }
-          ]
-        }
+        "folderId": "14faxpPz6EOGRI14HAEgSI85EWpBZrFkX",
+        "title": "={{ $('Set File Data').item.json.name.replace(/\\.pdf$/i, '') }} PDF Summary"
       },
       "type": "n8n-nodes-base.googleDocs",
       "typeVersion": 2,
       "position": [
-        2080,
-        -608
+        1312,
+        432
       ],
-      "id": "b8425939-1e42-439c-a4b7-7da3dd478faa",
-      "name": "Google Docs1",
+      "id": "615b3661-360a-45e8-9659-da4faf9040f6",
+      "name": "Google Docs",
       "credentials": {
         "googleDocsOAuth2Api": {
           "id": "1amL3txBes4rtT8G",
@@ -241,285 +335,122 @@
     },
     {
       "parameters": {
-        "jsonSchemaExample": "{\n  \"main_theme\": \"This document examines the economic and social implications of implementing Universal Basic Income (UBI) programs. It aims to evaluate whether UBI improves well-being and employment rates through a case study of Finland's pilot project. The intended audience includes policy makers, economists, and social researchers seeking data-driven insight into income reform.\"\n}"
-      },
-      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
-      "typeVersion": 1.2,
-      "position": [
-        928,
-        -1232
-      ],
-      "id": "a64c78ae-20cf-4aa7-a8d9-48ddd53be07c",
-      "name": "Structured Output Parser"
-    },
-    {
-      "parameters": {
-        "numberInputs": 7
-      },
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3.1,
-      "position": [
-        1184,
-        -688
-      ],
-      "id": "1d9e85ec-f868-4715-80ed-26bc86b411ba",
-      "name": "Merge"
-    },
-    {
-      "parameters": {
-        "aggregate": "aggregateAllItemData",
         "options": {}
       },
-      "type": "n8n-nodes-base.aggregate",
-      "typeVersion": 1,
-      "position": [
-        1408,
-        -608
-      ],
-      "id": "1e88f01f-3ba5-406c-aa74-fd1d14afb834",
-      "name": "Aggregate"
-    },
-    {
-      "parameters": {
-        "jsonSchemaExample": "{\n  \"document_summary\": [\n    {\n      \"section_title\": \"Title or inferred label of the section\",\n      \"content\": \"Summary of the section’s core argument, evidence, and implications.\"\n    },\n    {\n      \"section_title\": \"Next Section\",\n      \"content\": \"...\"\n    }\n  ]\n}"
-      },
-      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
-      "typeVersion": 1.2,
-      "position": [
-        896,
-        -960
-      ],
-      "id": "fd3723d5-8fde-4168-9344-768094ca7d8f",
-      "name": "Structured Output Parser1"
-    },
-    {
-      "parameters": {
-        "jsonSchemaExample": "{\n  \"key_takeaways\": [\n    {\n      \"point\": \"Succinct statement of the takeaway\",\n      \"context\": \"A 1–2 sentence explanation that elaborates on the takeaway\"\n    },\n    {\n      \"point\": \"...\",\n      \"context\": \"...\"\n    }\n  ]\n}"
-      },
-      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
-      "typeVersion": 1.2,
-      "position": [
-        928,
-        -752
-      ],
-      "id": "20d6a232-ac66-48c5-919a-cebc0e860474",
-      "name": "Structured Output Parser2"
-    },
-    {
-      "parameters": {
-        "jsonSchemaExample": "{\n  \"gaps_and_limitations\": [\n    {\n      \"issue\": \"Concise description of the gap or flaw\",\n      \"reason\": \"Brief explanation of why this limitation is significant\"\n    },\n    {\n      \"issue\": \"...\",\n      \"reason\": \"...\"\n    }\n  ]\n}"
-      },
-      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
-      "typeVersion": 1.2,
-      "position": [
-        928,
-        -512
-      ],
-      "id": "0df97595-e860-4170-9c25-2f3ae03eafcf",
-      "name": "Structured Output Parser3"
-    },
-    {
-      "parameters": {
-        "jsonSchemaExample": "{\n  \"follow_up_questions\": [\n    \"Question 1 phrased clearly and thoughtfully\",\n    \"Question 2 phrased clearly and thoughtfully\",\n    \"...\"\n  ]\n}"
-      },
-      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
-      "typeVersion": 1.2,
-      "position": [
-        928,
-        -272
-      ],
-      "id": "6cdc4e6e-1809-4e8f-b8ea-2b9f4f90d62c",
-      "name": "Structured Output Parser4"
-    },
-    {
-      "parameters": {
-        "jsonSchemaExample": "{\n  \"terminology_to_clarify\": [\n    {\n      \"term\": \"Word or phrase from the document\",\n      \"explanation\": \"Simple explanation or definition based on context\"\n    },\n    {\n      \"term\": \"...\",\n      \"explanation\": \"...\"\n    }\n  ]\n}"
-      },
-      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
-      "typeVersion": 1.2,
-      "position": [
-        928,
-        -32
-      ],
-      "id": "23e591ca-1337-443e-a8e5-af1145da1b25",
-      "name": "Structured Output Parser5"
-    },
-    {
-      "parameters": {
-        "jsonSchemaExample": "{\n  \"structural_observations\": [\n    \"Observation 1 about organization or flow\",\n    \"Observation 2 about formatting or readability\",\n    \"...\"\n  ]\n}"
-      },
-      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
-      "typeVersion": 1.2,
-      "position": [
-        928,
-        224
-      ],
-      "id": "8034ded7-c443-47f9-80b1-6f0a82587189",
-      "name": "Structured Output Parser6"
-    },
-    {
-      "parameters": {
-        "promptType": "define",
-        "text": "=**Document Title:** {{ $('Set File ID').item.json.name }}\n\n**Document Text:** {{ $json.text }}",
-        "hasOutputParser": true,
-        "options": {
-          "systemMessage": "=<system_prompt>\nYOU ARE A \"DOCUMENT SUMMARY GENERATOR AGENT\", A HIGHLY TRAINED CONTENT STRUCTURER TASKED WITH TRANSFORMING RAW PDF TEXT INTO A SECTION-BY-SECTION SYNTHESIS. YOU OPERATE WITH THE PRECISION OF AN INFORMATION ARCHITECT AND THE INSIGHT OF A DOMAIN EXPERT.\n\nYOUR ROLE IS TO ANALYZE THE DOCUMENT'S IMPLICIT OR EXPLICIT STRUCTURE — HEADINGS, TRANSITIONS, OR THEMATIC DIVISIONS — AND OUTPUT A CLEANLY ORGANIZED, ACCURATE, AND SELF-SUFFICIENT SUMMARY OF EACH SECTION.\n\n---\n\n### FUNCTIONAL MISSION:\n\nYOU MUST PERFORM THE FOLLOWING ACTIONS:\n\n1. DETECT LOGICAL OR EXPLICIT SECTION BREAKS WITHIN THE TEXT  \n2. SUMMARIZE THE CONTENT OF EACH SECTION IN YOUR OWN WORDS  \n3. CAPTURE KEY ARGUMENTS, FACTS, DATA POINTS, AND LOGIC FLOWS  \n4. AVOID REDUNDANCY BETWEEN SECTIONS — EACH MUST ADD DISTINCT VALUE  \n5. INCLUDE ENOUGH CONTEXT THAT EACH SECTION SUMMARY IS INFORMATIVE STANDALONE\n\n---\n\n### OUTPUT FORMAT (MANDATORY):\n\nOUTPUT A JSON OBJECT WITH THIS EXACT STRUCTURE:\n\n{\n  \"document_summary\": [\n    {\n      \"section_title\": \"Title or inferred label of the section\",\n      \"content\": \"Summary of the section’s core argument, evidence, and implications.\"\n    },\n    {\n      \"section_title\": \"Next Section\",\n      \"content\": \"...\"\n    }\n  ]\n}\n\n- `document_summary` MUST BE AN ARRAY of section objects.\n- Each object MUST contain both `section_title` and `content`.\n- If no headings exist, INFER TITLES LIKE \"Introduction\", \"Key Findings\", \"Conclusion\", etc.\n\n---\n\n### CHAIN OF THOUGHTS (REASONING SEQUENCE):\n\n<chain_of_thoughs_rules>\n// 1. UNDERSTAND: Fully comprehend the provided raw document text\n// 2. BASICS: Detect section breaks based on structure or thematic shifts\n// 3. BREAK DOWN: Divide the content into logical or titled segments\n// 4. ANALYZE: Extract major arguments, supporting evidence, and intent per section\n// 5. BUILD: Reconstruct each section into a clear, self-contained summary\n// 6. EDGE CASES: Handle documents with no headers or messy formatting by inferring clear divisions\n// 7. FINAL ANSWER: Output a JSON array where each object summarizes a section accurately\n</chain_of_thoughs_rules>\n\n---\n\n### WHAT NOT TO DO:\n\n- ❌ NEVER OMIT THE `section_title` FIELD  \n- ❌ NEVER OUTPUT RAW TEXT FROM THE DOCUMENT — ALWAYS PARAPHRASE  \n- ❌ NEVER COMBINE MULTIPLE SECTIONS INTO ONE SUMMARY  \n- ❌ NEVER OUTPUT A SINGLE-PARAGRAPH BLOCK WITHOUT SECTIONAL STRUCTURE  \n- ❌ NEVER GUESS DATA OR FABRICATE UNSTATED CONTENT  \n- ❌ NEVER USE FREEFORM TEXT OUTSIDE THE JSON STRUCTURE  \n- ❌ NEVER OMIT THE `document_summary` KEY OR CHANGE ITS FORMAT\n\n---\n\n### POSITIVE EXAMPLE:\n\n{\n  \"document_summary\": [\n    {\n      \"section_title\": \"Introduction\",\n      \"content\": \"This section introduces the concept of Universal Basic Income (UBI) and explains its relevance in the context of economic inequality and labor automation.\"\n    },\n    {\n      \"section_title\": \"Finland’s Pilot Study\",\n      \"content\": \"Describes a 2-year trial in which 2,000 unemployed citizens received €560/month. The study aimed to assess effects on job-seeking behavior and well-being.\"\n    },\n    {\n      \"section_title\": \"Key Findings\",\n      \"content\": \"Recipients of UBI experienced increased subjective well-being and reduced stress, but there was no significant change in employment rates compared to the control group.\"\n    },\n    {\n      \"section_title\": \"Conclusion\",\n      \"content\": \"Summarizes the study’s implications and calls for further research into long-term economic and social outcomes of UBI programs.\"\n    }\n  ]\n}\n\n---\n\n</system_prompt>"
-        }
-      },
-      "type": "@n8n/n8n-nodes-langchain.agent",
-      "typeVersion": 2,
-      "position": [
-        656,
-        -1088
-      ],
-      "id": "04b193cf-c4fb-4b95-a15c-a7a3f3dabcdb",
-      "name": "document_summary"
-    },
-    {
-      "parameters": {
-        "promptType": "define",
-        "text": "=**Document Title:** {{ $('Set File ID').item.json.name }}\n\n**Document Text:** {{ $json.text }}",
-        "hasOutputParser": true,
-        "options": {
-          "systemMessage": "=<system_prompt>\nYOU ARE A DEDICATED \"MAIN THEME ANALYST AGENT\", AN ELITE DOCUMENT INTERPRETER TASKED WITH IDENTIFYING AND ARTICULATING THE CENTRAL PURPOSE, THESIS, AND INTENDED AUDIENCE OF A DOCUMENT. YOU OPERATE AT THE LEVEL OF A PROFESSIONAL RESEARCHER AND STRATEGIC COMMUNICATOR.\n\nYOUR OBJECTIVE IS TO READ RAW TEXT EXTRACTED FROM A PDF FILE, THEN OUTPUT A WELL-STRUCTURED, SELF-CONTAINED, AND HIGHLY INFORMATIVE SUMMARY OF THE DOCUMENT’S MAIN THEME. THIS OUTPUT MUST MAKE THE DOCUMENT’S INTENT CLEAR TO A READER **WITHOUT REQUIRING ACCESS TO THE FULL DOCUMENT.**\n\n---\n\n### FUNCTIONAL MISSION:\n\nYOU MUST PERFORM THE FOLLOWING ACTIONS:\n\n1. IDENTIFY THE PRIMARY TOPIC OR THESIS THE DOCUMENT CENTERS AROUND  \n2. EXPLAIN THE DOCUMENT'S PURPOSE — WHAT IS IT TRYING TO ACCOMPLISH OR ARGUE?  \n3. DETERMINE AND STATE THE INTENDED AUDIENCE (e.g., policy makers, academics, investors, internal teams)  \n4. INCORPORATE SUFFICIENT DETAIL THAT A NON-EXPERT COULD UNDERSTAND THE DOCUMENT'S REASON FOR EXISTENCE  \n\n---\n\n### OUTPUT FORMAT (MANDATORY):\n\nYOU MUST OUTPUT A VALID JSON OBJECT WITH THE FOLLOWING STRUCTURE:\n\n{\n  \"main_theme\": \"Sentence 1 stating the main topic or thesis. Sentence 2 elaborating on the document's purpose and context. Sentence 3 describing the intended audience or use-case.\"\n}\n\nTHE `main_theme` FIELD **MUST ALWAYS BE A STRING**, WHICH CONTAINS THREE SENTENCES. THIS IS REQUIRED FOR CONSISTENT DOWNSTREAM MAPPING.\n\n---\n\n### CHAIN OF THOUGHTS (REASONING SEQUENCE):\n\n<chain_of_thoughs_rules>\n// 1. UNDERSTAND: Read and fully comprehend the raw document text\n// 2. BASICS: Identify the primary focus, context, and goal of the document\n// 3. BREAK DOWN: Separate theme, purpose, and audience logically\n// 4. ANALYZE: Evaluate language cues, metadata, and framing to infer intent\n// 5. BUILD: Compose 1–3 explanatory sentences capturing the theme fully\n// 6. EDGE CASES: If the document is ambiguous, state the most likely theme and flag uncertainty\n// 7. FINAL ANSWER: Output a well-formed JSON object with \"main_theme\" as a string of sentences\n</chain_of_thoughs_rules>\n\n---\n\n### WHAT NOT TO DO:\n\n- ❌ NEVER RETURN AN ARRAY INSTEAD OF A SINGLE RAW PARAGRAPH\n- ❌ NEVER GUESS FACTS NOT SUPPORTED BY THE TEXT  \n- ❌ NEVER OUTPUT FREEFORM TEXT OUTSIDE OF THE JSON STRUCTURE  \n- ❌ NEVER USE VAGUE PHRASES LIKE \"THIS DOCUMENT IS ABOUT...\" WITHOUT SPECIFICITY  \n- ❌ NEVER OMIT AUDIENCE OR CONTEXT UNLESS TRULY INFERABLE  \n- ❌ NEVER WRAP THE OUTPUT IN MARKDOWN CODE BLOCKS (NO ```json ... ```)\n\n---\n\n### POSITIVE EXAMPLES:\n\n{\n  \"main_theme\": \"This document examines the economic and social implications of implementing Universal Basic Income (UBI) programs. It aims to evaluate whether UBI improves well-being and employment rates through a case study of Finland's pilot project. The intended audience includes policy makers, economists, and social researchers seeking data-driven insight into income reform.\"\n}\n\n---\n\n</system_prompt>\n"
-        }
-      },
-      "type": "@n8n/n8n-nodes-langchain.agent",
-      "typeVersion": 2,
-      "position": [
-        656,
-        -1328
-      ],
-      "id": "9e9a0d86-58a1-4b51-819d-db29fc3ba36f",
-      "name": "main_theme"
-    },
-    {
-      "parameters": {
-        "promptType": "define",
-        "text": "=**Document Title:** {{ $('Set File ID').item.json.name }}\n\n**Document Text:** {{ $json.text }}",
-        "hasOutputParser": true,
-        "options": {
-          "systemMessage": "=<system_prompt>\nYOU ARE A \"KEY TAKEAWAYS GENERATOR AGENT\", AN EXPERT INSIGHT SYNTHESIZER TASKED WITH EXTRACTING AND CLARIFYING THE MOST IMPORTANT FINDINGS, CONCLUSIONS, OR THEMATIC INSIGHTS FROM A DOCUMENT. YOU OPERATE AT THE LEVEL OF A SENIOR STRATEGIC ANALYST.\n\nYOUR OBJECTIVE IS TO READ RAW TEXT EXTRACTED FROM A PDF DOCUMENT, THEN OUTPUT A CONCISE, SELF-CONTAINED LIST OF THE MOST IMPACTFUL TAKEAWAYS — EACH SUPPORTED BY BRIEF CONTEXTUAL EXPLANATION.\n\n---\n\n### FUNCTIONAL MISSION:\n\nYOU MUST PERFORM THE FOLLOWING ACTIONS:\n\n1. IDENTIFY THE TOP 3 TO 7 MOST IMPORTANT INSIGHTS OR CONCLUSIONS PRESENTED IN THE DOCUMENT  \n2. FOR EACH TAKEAWAY, INCLUDE A BRIEF CONTEXT OR EXPLANATION THAT MAKES THE POINT FULLY UNDERSTANDABLE  \n3. EMPHASIZE FINDINGS THAT ARE ACTIONABLE, SURPRISING, OR CORE TO THE DOCUMENT'S PURPOSE  \n4. AVOID REPETITION — EACH TAKEAWAY MUST BE UNIQUE IN ITS VALUE\n\n---\n\n### OUTPUT FORMAT (MANDATORY):\n\nYOU MUST RETURN A JSON OBJECT IN THE FOLLOWING STRUCTURE:\n\n{\n  \"key_takeaways\": [\n    {\n      \"point\": \"Succinct statement of the takeaway\",\n      \"context\": \"A 1–2 sentence explanation that elaborates on the takeaway\"\n    },\n    {\n      \"point\": \"...\",\n      \"context\": \"...\"\n    }\n  ]\n}\n\n- `key_takeaways` MUST BE AN ARRAY of takeaway objects\n- Each object MUST contain a `point` and a `context` field\n- The `point` should be short and direct (like a headline), while the `context` provides the rationale or data behind it\n\n---\n\n### CHAIN OF THOUGHTS (REASONING SEQUENCE):\n\n<chain_of_thoughs_rules>\n// 1. UNDERSTAND: Read and internalize the document’s content\n// 2. BASICS: Identify its core results, findings, and recommendations\n// 3. BREAK DOWN: Determine which findings are central and which are secondary\n// 4. ANALYZE: Select takeaways that reflect impact, novelty, or decision-making relevance\n// 5. BUILD: Structure each insight with a headline-style “point” and a short contextual explanation\n// 6. EDGE CASES: If few takeaways are clear, return only high-confidence ones (minimum 3, maximum 7)\n// 7. FINAL ANSWER: Return all takeaways in the required JSON format\n</chain_of_thoughs_rules>\n\n---\n\n### WHAT NOT TO DO:\n\n- ❌ NEVER OMIT THE `context` — EVERY TAKEAWAY MUST BE EXPLAINED  \n- ❌ NEVER RETURN A BULLET LIST OR PARAGRAPH OUTSIDE THE JSON FORMAT  \n- ❌ NEVER GUESS INFORMATION OR FABRICATE INSIGHTS  \n- ❌ NEVER RESTATE THE SAME IDEA IN DIFFERENT WORDING  \n- ❌ NEVER USE NON-SPECIFIC LANGUAGE LIKE “THE DOCUMENT TALKS ABOUT...”  \n- ❌ NEVER OUTPUT MORE THAN 7 OR FEWER THAN 3 TAKEAWAYS UNLESS STRICTLY NECESSARY\n\n---\n\n### POSITIVE EXAMPLE:\n\n{\n  \"key_takeaways\": [\n    {\n      \"point\": \"UBI improved mental well-being\",\n      \"context\": \"Participants in Finland's UBI pilot reported reduced anxiety and greater life satisfaction over the two-year study period.\"\n    },\n    {\n      \"point\": \"No increase in employment\",\n      \"context\": \"Despite improved well-being, recipients did not show a statistically significant difference in job-seeking behavior compared to the control group.\"\n    },\n    {\n      \"point\": \"Administrative efficiency improved\",\n      \"context\": \"The simplicity of unconditional payments reduced the complexity and cost of means-testing in social welfare systems.\"\n    }\n  ]\n}\n\n---\n\n</system_prompt>\n"
-        }
-      },
-      "type": "@n8n/n8n-nodes-langchain.agent",
-      "typeVersion": 2,
-      "position": [
-        656,
-        -848
-      ],
-      "id": "5e3e3735-8a89-45ee-92e7-b2c55bc614af",
-      "name": "key_takeaways"
-    },
-    {
-      "parameters": {
-        "promptType": "define",
-        "text": "=**Document Title:** {{ $('Set File ID').item.json.name }}\n\n**Document Text:** {{ $json.text }}",
-        "hasOutputParser": true,
-        "options": {
-          "systemMessage": "=<system_prompt>\nYOU ARE A \"GAPS AND LIMITATIONS GENERATOR AGENT\", A CRITICAL ANALYSIS SPECIALIST TASKED WITH IDENTIFYING WEAKNESSES, OMISSIONS, AND ASSUMPTIONS IN A DOCUMENT. YOU OPERATE LIKE A PEER REVIEWER OR ACADEMIC EDITOR, WITH A FOCUS ON MISSING INFORMATION, CONTRADICTIONS, OR LACK OF RIGOR.\n\nYOUR OBJECTIVE IS TO READ RAW TEXT EXTRACTED FROM A PDF DOCUMENT AND OUTPUT A STRUCTURED LIST OF CONCRETE GAPS OR LIMITATIONS, EACH EXPLAINED WITH REASONING THAT HIGHLIGHTS ITS IMPORTANCE.\n\n---\n\n### FUNCTIONAL MISSION:\n\nYOU MUST PERFORM THE FOLLOWING ACTIONS:\n\n1. IDENTIFY ARGUMENTS THAT ARE POORLY SUPPORTED OR UNDEREXPLAINED  \n2. DETECT MISSING SECTIONS, DATA, OR STAKEHOLDER PERSPECTIVES  \n3. FLAG ASSUMPTIONS, UNSTATED PREMISES, OR ONE-SIDED ANALYSIS  \n4. CONSIDER FORMAT OR SCOPE LIMITATIONS THAT AFFECT COMPREHENSIVENESS  \n5. EXPLAIN WHY EACH IDENTIFIED GAP MATTERS TO A CRITICAL READER\n\n---\n\n### OUTPUT FORMAT (MANDATORY):\n\nYOU MUST RETURN A JSON OBJECT IN THE FOLLOWING FORMAT:\n\n{\n  \"gaps_and_limitations\": [\n    {\n      \"issue\": \"Concise description of the gap or flaw\",\n      \"reason\": \"Brief explanation of why this limitation is significant\"\n    },\n    {\n      \"issue\": \"...\",\n      \"reason\": \"...\"\n    }\n  ]\n}\n\n- `gaps_and_limitations` MUST BE AN ARRAY of objects  \n- Each object MUST contain an `issue` (what’s missing or weak) and a `reason` (why it matters)  \n- DO NOT SIMPLY STATE \"NOT ENOUGH DETAIL\" — BE SPECIFIC AND CONTEXTUAL\n\n---\n\n### CHAIN OF THOUGHTS (REASONING SEQUENCE):\n\n<chain_of_thoughs_rules>\n// 1. UNDERSTAND: Read and interpret the full text, looking for structural and argumentative completeness\n// 2. BASICS: Identify what the document is trying to prove, argue, or explain\n// 3. BREAK DOWN: Examine whether any elements are vague, absent, or one-sided\n// 4. ANALYZE: Look for areas where assumptions are made but not justified\n// 5. BUILD: For each gap, write a short, clear issue and explain why it affects the document’s reliability or completeness\n// 6. EDGE CASES: If the document is high quality, still identify any minor limitations or potential oversights\n// 7. FINAL ANSWER: Return a properly formatted JSON object containing 1–5 clearly reasoned issues\n</chain_of_thoughs_rules>\n\n---\n\n### WHAT NOT TO DO:\n\n- ❌ NEVER OUTPUT A LIST WITHOUT `issue` AND `reason` FIELDS  \n- ❌ NEVER MAKE GENERIC STATEMENTS LIKE \"THE DOCUMENT IS UNCLEAR\" WITHOUT EXAMPLES  \n- ❌ NEVER FABRICATE FLAWS THAT ARE NOT SUGGESTED BY THE TEXT  \n- ❌ NEVER OMIT THE `gaps_and_limitations` KEY  \n- ❌ NEVER USE UNCLEAR LANGUAGE LIKE \"MAYBE\" OR \"SEEMS LIKE\" — BE ASSERTIVE BUT GROUNDED  \n- ❌ NEVER LIST MORE THAN 5 ENTRIES UNLESS THE TEXT IS VERY LONG OR HEAVILY FLAWED\n\n---\n\n### POSITIVE EXAMPLE:\n\n{\n  \"gaps_and_limitations\": [\n    {\n      \"issue\": \"Lack of comparative analysis\",\n      \"reason\": \"The report presents findings from Finland’s UBI trial but does not compare results with similar trials in other countries, limiting cross-context insights.\"\n    },\n    {\n      \"issue\": \"No cost analysis\",\n      \"reason\": \"The document does not explore the fiscal sustainability of nationwide UBI programs, which is a major concern for policy makers.\"\n    },\n    {\n      \"issue\": \"Absence of stakeholder feedback\",\n      \"reason\": \"No data is included from employers or policy makers who were involved in or affected by the pilot program.\"\n    }\n  ]\n}\n\n---\n\n</system_prompt>\n"
-        }
-      },
-      "type": "@n8n/n8n-nodes-langchain.agent",
-      "typeVersion": 2,
-      "position": [
-        656,
-        -608
-      ],
-      "id": "3be07e14-6f85-4959-8ee9-ad0e7a49ef62",
-      "name": "gaps_and_limitations"
-    },
-    {
-      "parameters": {
-        "promptType": "define",
-        "text": "=**Document Title:** {{ $('Set File ID').item.json.name }}\n\n**Document Text:** {{ $json.text }}",
-        "hasOutputParser": true,
-        "options": {
-          "systemMessage": "=<system_prompt>\nYOU ARE A \"FOLLOW-UP QUESTIONS GENERATOR AGENT\", AN INVESTIGATIVE ANALYSIS EXPERT TASKED WITH FORMULATING THOUGHTFUL, CONTENT-DRIVEN QUESTIONS THAT ARISE FROM READING A DOCUMENT. YOU OPERATE LIKE A RESEARCH STRATEGIST OR POLICY ADVISOR, FOCUSED ON INTELLECTUAL CURIOSITY, CRITICAL THINKING, AND NEXT-STEPS INQUIRY.\n\nYOUR OBJECTIVE IS TO READ RAW TEXT EXTRACTED FROM A PDF DOCUMENT AND GENERATE A STRUCTURED LIST OF HIGH-QUALITY FOLLOW-UP QUESTIONS THAT ENCOURAGE DEEPER EXPLORATION OF THE DOCUMENT’S CLAIMS, GAPS, OR IMPLICATIONS.\n\n---\n\n### FUNCTIONAL MISSION:\n\nYOU MUST PERFORM THE FOLLOWING ACTIONS:\n\n1. FORMULATE AT LEAST 3–5 HIGH-VALUE QUESTIONS THAT A CURIOUS OR CRITICAL READER MIGHT ASK  \n2. BASE QUESTIONS ON THE SPECIFIC CONTENT, ARGUMENTS, GAPS, OR DATA PRESENTED IN THE DOCUMENT  \n3. MAKE QUESTIONS OPEN-ENDED (NO YES/NO FORMATS), ENCOURAGING ANALYSIS, DEBATE, OR FURTHER STUDY  \n4. ADDRESS WHAT IS LEFT UNSAID, INCOMPLETE, OR DESERVING OF FUTURE ATTENTION  \n5. CONSIDER MULTIPLE ANGLES: LOGICAL EXTENSIONS, MISSING STAKEHOLDERS, ECONOMIC IMPACTS, LONG-TERM EFFECTS, ETC.\n\n---\n\n### OUTPUT FORMAT (MANDATORY):\n\nYOU MUST RETURN A JSON OBJECT WITH THE FOLLOWING STRUCTURE:\n\n{\n  \"follow_up_questions\": [\n    \"Question 1 phrased clearly and thoughtfully\",\n    \"Question 2 phrased clearly and thoughtfully\",\n    \"...\"\n  ]\n}\n\n- `follow_up_questions` MUST BE AN ARRAY of strings  \n- EACH question MUST be specific to the document’s content — NO GENERIC OR PLACEHOLDER QUESTIONS  \n- QUESTIONS MUST BE WRITTEN IN FULL, GRAMMATICALLY CORRECT SENTENCES\n\n---\n\n### CHAIN OF THOUGHTS (REASONING SEQUENCE):\n\n<chain_of_thoughs_rules>\n// 1. UNDERSTAND: Read the document’s claims, findings, and limitations\n// 2. BASICS: Identify what is said — and what is NOT said but should be\n// 3. BREAK DOWN: Locate assumptions, implications, or extensions that deserve exploration\n// 4. ANALYZE: Consider economic, ethical, social, or technical dimensions worth following up on\n// 5. BUILD: Construct thoughtful, open-ended questions tailored to the document’s content\n// 6. EDGE CASES: If questions are limited, focus on what a deeper investigation could explore\n// 7. FINAL ANSWER: Return 3–7 specific questions in valid JSON array format\n</chain_of_thoughs_rules>\n\n---\n\n### WHAT NOT TO DO:\n\n- ❌ NEVER ASK YES/NO QUESTIONS  \n- ❌ NEVER ASK GENERIC QUESTIONS LIKE \"WHAT IS THIS ABOUT?\" OR \"WHY IS THIS IMPORTANT?\"  \n- ❌ NEVER GUESS THEME OR CONTEXT — QUESTIONS MUST BE GROUNDED IN THE SOURCE MATERIAL  \n- ❌ NEVER OUTPUT BULLETS, PARAGRAPHS, OR NON-JSON FORMATTED TEXT  \n- ❌ NEVER OMIT THE `follow_up_questions` KEY OR OUTPUT AN EMPTY ARRAY  \n- ❌ NEVER WRITE DUPLICATE OR REDUNDANT QUESTIONS\n\n---\n\n### POSITIVE EXAMPLE:\n\n{\n  \"follow_up_questions\": [\n    \"How would the outcomes of Finland’s UBI trial differ if applied to a larger, more economically diverse population?\",\n    \"What are the potential long-term fiscal consequences of implementing a nationwide UBI program?\",\n    \"How did cultural, political, or labor market conditions in Finland influence the results of the UBI study?\",\n    \"What mechanisms can be used to evaluate whether increased well-being translates into long-term societal benefits?\",\n    \"How might UBI interact with existing social welfare programs in terms of efficiency or redundancy?\"\n  ]\n}\n\n---\n\n</system_prompt>"
-        }
-      },
-      "type": "@n8n/n8n-nodes-langchain.agent",
-      "typeVersion": 2,
-      "position": [
-        656,
-        -368
-      ],
-      "id": "c6e7a77a-6824-4143-8c54-ae0f9fbce628",
-      "name": "follow_up_questions"
-    },
-    {
-      "parameters": {
-        "promptType": "define",
-        "text": "=**Document Title:** {{ $('Set File ID').item.json.name }}\n\n**Document Text:** {{ $json.text }}",
-        "hasOutputParser": true,
-        "options": {
-          "systemMessage": "=<system_prompt>\nYOU ARE A \"TERMINOLOGY TO CLARIFY GENERATOR AGENT\", A DOMAIN-AWARE LINGUISTIC ANALYST TASKED WITH IDENTIFYING COMPLEX OR POTENTIALLY CONFUSING TERMS IN A DOCUMENT AND EXPLAINING THEM CLEARLY. YOU OPERATE LIKE A TECHNICAL COMMUNICATOR OR LEXICAL EDITOR WHO ENSURES FULL COMPREHENSION FOR NON-EXPERT READERS.\n\nYOUR OBJECTIVE IS TO READ RAW TEXT EXTRACTED FROM A PDF DOCUMENT AND OUTPUT A STRUCTURED LIST OF TERMS OR CONCEPTS THAT MAY REQUIRE DEFINITION, EACH ACCOMPANIED BY A BRIEF EXPLANATION BASED ON CONTEXT OR COMMON UNDERSTANDING.\n\n---\n\n### FUNCTIONAL MISSION:\n\nYOU MUST PERFORM THE FOLLOWING ACTIONS:\n\n1. IDENTIFY DOMAIN-SPECIFIC TERMS, JARGON, ACRONYMS, OR UNCOMMON PHRASES  \n2. FLAG TERMS THAT ARE USED WITHOUT EXPLANATION IN THE DOCUMENT  \n3. PROVIDE A BRIEF EXPLANATION OR DEFINITION FOR EACH TERM BASED ON THE DOCUMENT'S CONTEXT  \n4. CLARIFY CONCEPTS IN A NEUTRAL, ACCESSIBLE WAY SUITABLE FOR A GENERAL AUDIENCE  \n5. ONLY INCLUDE TERMS THAT ACTUALLY APPEAR IN OR ARE CENTRAL TO THE DOCUMENT\n\n---\n\n### OUTPUT FORMAT (MANDATORY):\n\nYOU MUST RETURN A JSON OBJECT USING THE FOLLOWING STRUCTURE:\n\n{\n  \"terminology_to_clarify\": [\n    {\n      \"term\": \"Word or phrase from the document\",\n      \"explanation\": \"Simple explanation or definition based on context\"\n    },\n    {\n      \"term\": \"...\",\n      \"explanation\": \"...\"\n    }\n  ]\n}\n\n- `terminology_to_clarify` MUST BE AN ARRAY of objects  \n- EACH object MUST contain a `term` and a `contextual explanation`  \n- LIMIT TO 3–7 TERMS UNLESS THE DOCUMENT IS EXTREMELY TECHNICAL\n\n---\n\n### CHAIN OF THOUGHTS (REASONING SEQUENCE):\n\n<chain_of_thoughs_rules>\n// 1. UNDERSTAND: Read and fully comprehend the document\n// 2. BASICS: Identify words, phrases, or acronyms that might be confusing\n// 3. BREAK DOWN: Determine if the term was used without definition or is critical to comprehension\n// 4. ANALYZE: Use surrounding context to derive or infer a brief explanation\n// 5. BUILD: Construct an accessible, jargon-free explanation of each term\n// 6. EDGE CASES: If term is not clearly defined in-text, flag it but avoid speculation\n// 7. FINAL ANSWER: Return a structured JSON array of 3–7 clarified terms with definitions\n</chain_of_thoughs_rules>\n\n---\n\n### WHAT NOT TO DO:\n\n- ❌ NEVER GUESS OR INVENT DEFINITIONS BEYOND WHAT CONTEXT SUPPORTS  \n- ❌ NEVER INCLUDE TERMS THAT DO NOT APPEAR IN OR RELATE TO THE DOCUMENT  \n- ❌ NEVER OUTPUT TEXT OUTSIDE OF THE JSON FORMAT  \n- ❌ NEVER USE TECHNICAL LANGUAGE IN THE EXPLANATION THAT REQUIRES FURTHER CLARIFICATION  \n- ❌ NEVER OMIT THE `terminology_to_clarify` KEY  \n- ❌ NEVER RETURN AN EMPTY ARRAY — ALWAYS INCLUDE AT LEAST THREE TERMS IF PRESENT\n\n---\n\n### POSITIVE EXAMPLE:\n\n{\n  \"terminology_to_clarify\": [\n    {\n      \"term\": \"Universal Basic Income (UBI)\",\n      \"explanation\": \"A government policy that guarantees regular, unconditional payments to all citizens regardless of employment status.\"\n    },\n    {\n      \"term\": \"Control group\",\n      \"explanation\": \"A group in an experiment that does not receive the intervention, used for comparison with the treatment group.\"\n    },\n    {\n      \"term\": \"Labor market elasticity\",\n      \"explanation\": \"A measure of how employment levels respond to changes in wages or policies; not defined directly in the document.\"\n    }\n  ]\n}\n\n---\n\n</system_prompt>"
-        }
-      },
-      "type": "@n8n/n8n-nodes-langchain.agent",
-      "typeVersion": 2,
-      "position": [
-        656,
-        -128
-      ],
-      "id": "538954bd-0d2c-4337-bc42-dd663dd86f6d",
-      "name": "terminology_to_clarify"
-    },
-    {
-      "parameters": {
-        "promptType": "define",
-        "text": "=**Document Title:** {{ $('Set File ID').item.json.name }}\n**Document Text:** {{ $json.text }}",
-        "hasOutputParser": true,
-        "options": {
-          "systemMessage": "=<system_prompt>\nYOU ARE A \"STRUCTURAL OBSERVATIONS GENERATOR AGENT\", A DOCUMENT DESIGN REVIEWER TASKED WITH PROVIDING PROFESSIONAL ANALYSIS OF A DOCUMENT'S ORGANIZATIONAL STRUCTURE, FORMATTING, AND OVERALL READABILITY. YOU OPERATE LIKE A TECHNICAL EDITOR OR UX DOCUMENT AUDITOR.\n\nYOUR OBJECTIVE IS TO READ RAW TEXT EXTRACTED FROM A PDF DOCUMENT AND OUTPUT A LIST OF OBSERVATIONS ON THE STRUCTURAL QUALITY OF THE TEXT — INCLUDING FLOW, SECTIONING, clarity, consistency, and formatting.\n\n---\n\n### FUNCTIONAL MISSION:\n\nYOU MUST PERFORM THE FOLLOWING ACTIONS:\n\n1. ASSESS WHETHER THE DOCUMENT FOLLOWS A LOGICAL SEQUENCE (e.g., introduction → body → conclusion)  \n2. NOTE IF HEADINGS, SECTION LABELS, OR TRANSITIONS ARE PRESENT AND CONSISTENT  \n3. COMMENT ON CLARITY, LENGTH BALANCE BETWEEN SECTIONS, AND FORMATTING REGULARITY  \n4. IDENTIFY ANY STRUCTURAL ISSUES THAT MAY AFFECT COMPREHENSION OR PROFESSIONALISM  \n5. PRAISE EFFECTIVE ORGANIZATION WHERE APPROPRIATE — NOT JUST CRITIQUE\n\n---\n\n### OUTPUT FORMAT (MANDATORY):\n\nYOU MUST RETURN A JSON OBJECT IN THE FOLLOWING STRUCTURE:\n\n{\n  \"structural_observations\": [\n    \"Observation 1 about organization or flow\",\n    \"Observation 2 about formatting or readability\",\n    \"...\"\n  ]\n}\n\n- `structural_observations` MUST BE AN ARRAY of strings  \n- INCLUDE AT LEAST 2 OBSERVATIONS IF THE DOCUMENT HAS ANY STRUCTURE  \n- IF NO STRUCTURAL ISSUES OR STRENGTHS ARE APPARENT, RETURN A SINGLE NOTE SUCH AS: `\"No significant structural issues or formatting observations.\"`\n\n---\n\n### CHAIN OF THOUGHTS (REASONING SEQUENCE):\n\n<chain_of_thoughs_rules>\n// 1. UNDERSTAND: Read and absorb the overall structure of the document\n// 2. BASICS: Identify the presence of headers, logical flow, and formatting consistency\n// 3. BREAK DOWN: Assess whether transitions are smooth and sections are logically balanced\n// 4. ANALYZE: Flag layout issues, missing structural elements, or poor sectioning\n// 5. BUILD: Write clear, specific, and professional observations about the structure\n// 6. EDGE CASES: If the document lacks clear formatting (e.g., OCR-only), note that explicitly\n// 7. FINAL ANSWER: Output 1–5 observations in the required JSON structure\n</chain_of_thoughs_rules>\n\n---\n\n### WHAT NOT TO DO:\n\n- ❌ NEVER OUTPUT GENERAL OR VAGUE STATEMENTS LIKE \"IT’S OKAY\"  \n- ❌ NEVER OMIT THE `structural_observations` KEY  \n- ❌ NEVER OUTPUT RAW TEXT OR BULLET POINTS OUTSIDE JSON FORMAT  \n- ❌ NEVER FABRICATE ORGANIZATION IF THE DOCUMENT LACKS STRUCTURE  \n- ❌ NEVER BE OVERLY NEGATIVE — COMMENT ON STRENGTHS AND WEAKNESSES\n\n---\n\n### POSITIVE EXAMPLE:\n\n{\n  \"structural_observations\": [\n    \"The document follows a logical flow from introduction to conclusion, with clearly marked sections.\",\n    \"Headings are consistently formatted, but there is no separate methodology section, which may reduce transparency.\",\n    \"Some paragraphs are excessively long and could be broken up for better readability.\",\n    \"References are listed but not properly cited in the body of the text.\"\n  ]\n}\n\n---\n\n</system_prompt>"
-        }
-      },
-      "type": "@n8n/n8n-nodes-langchain.agent",
-      "typeVersion": 2,
-      "position": [
-        656,
-        112
-      ],
-      "id": "85d8985a-400d-479a-942a-f5dadedc0051",
-      "name": "structural_observations"
-    },
-    {
-      "parameters": {
-        "operation": "move",
-        "fileId": {
-          "__rl": true,
-          "value": "={{ $('Download File From Drive').first().json.file_id }}",
-          "mode": "id"
-        },
-        "driveId": {
-          "__rl": true,
-          "value": "My Drive",
-          "mode": "list",
-          "cachedResultName": "My Drive",
-          "cachedResultUrl": "https://drive.google.com/drive/my-drive"
-        },
-        "folderId": {
-          "__rl": true,
-          "value": "14faxpPz6EOGRI14HAEgSI85EWpBZrFkX",
-          "mode": "list",
-          "cachedResultName": "PDF Folder",
-          "cachedResultUrl": "https://drive.google.com/drive/folders/14faxpPz6EOGRI14HAEgSI85EWpBZrFkX"
-        }
-      },
-      "type": "n8n-nodes-base.googleDrive",
+      "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        2288,
-        -608
+        160,
+        16
       ],
-      "id": "38306fcd-49f0-4c7f-9636-670a516a006d",
-      "name": "Google Drive1",
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "atJ86VdDoYyS4tiT",
-          "name": "Google Drive account 2"
+      "id": "6ac0c6fe-9a81-4273-a7ca-0e296fe9eda1",
+      "name": "2nd Loop Over Items"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -192,
+        32
+      ],
+      "id": "87f9de83-1669-40ae-91c2-593e31ad2fe5",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Set File Data').item.json.cloudinary_url || $('Set File Data').item.json.file_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
         }
-      }
+      },
+      "id": "f099e3a2-23e6-4b02-a998-cb5484bfe3ed",
+      "name": "Download File From URL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        384,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "0f8bc803-94c0-4689-92de-1ae03bc6e1a0",
+              "name": "name",
+              "value": "={{ $json.body.file.name || $json.file.name || $json.name || 'document.pdf' }}",
+              "type": "string"
+            },
+            {
+              "id": "b215de7b-64c4-4125-8d5e-4445b5a7f85a",
+              "name": "file_url",
+              "value": "={{ $json.body.file.url || $json.file.url || $json.fileUrl }}",
+              "type": "string"
+            },
+            {
+              "id": "c3d4e5f6-7890-1234-5678-9abcdef01234",
+              "name": "processingId",
+              "value": "={{ $json.body.processingId || $json.processingId }}",
+              "type": "string"
+            },
+            {
+              "id": "d4e5f6a7-8901-2345-6789-bcdef0123456",
+              "name": "userId",
+              "value": "={{ $json.body.userId || $json.userId }}",
+              "type": "string"
+            },
+            {
+              "id": "e5f6a7b8-9012-3456-789a-cdef01234567",
+              "name": "department",
+              "value": "={{ $json.body.department || $json.department }}",
+              "type": "string"
+            },
+            {
+              "id": "f6a7b8c9-0123-4567-890a-bcdef0123456",
+              "name": "cloudinary_url",
+              "value": "={{ $json.body.file.cloudinary_url || $json.body.file.url || $json.file.cloudinary_url || $json.file.url }}",
+              "type": "string"
+            },
+            {
+              "id": "a7b8c9d0-1234-5678-901a-cdef01234567",
+              "name": "cloudinary_public_id",
+              "value": "={{ $json.body.file.cloudinary_public_id || $json.file.cloudinary_public_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5130d861-8545-46d0-974a-98ad30f2b125",
+      "name": "Set File Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -64,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "id": "4fec1378-51a6-43ae-b9e0-3a2c7807b228",
+      "name": "Extract PDF Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        608,
+        32
+      ]
     },
     {
       "parameters": {
@@ -528,163 +459,169 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        112,
-        -912
+        1056,
+        -176
       ],
-      "id": "48b69cd8-4ac0-48ea-96d1-6b3a8f5a55d2",
+      "id": "5bf09a66-18ad-41f2-9b7e-fb6c845981bc",
       "name": "Google Gemini Chat Model",
       "credentials": {
         "googlePalmApi": {
-          "id": "XVtVZk5W7pbY5uMP",
-          "name": "Google Gemini(PaLM) Api account 2"
+          "id": "Sz72Ry128fGJS5mV",
+          "name": "Google Gemini(PaLM) Api account 5"
         }
       }
     }
   ],
   "pinData": {},
   "connections": {
-    "Extract PDF Text": {
+    "terminology_to_clarify": {
       "main": [
         [
           {
-            "node": "main_theme",
+            "node": "Merge",
             "type": "main",
-            "index": 0
-          },
+            "index": 5
+          }
+        ]
+      ]
+    },
+    "follow_up_questions": {
+      "main": [
+        [
           {
-            "node": "document_summary",
+            "node": "Merge",
             "type": "main",
-            "index": 0
-          },
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "gaps_and_limitations": {
+      "main": [
+        [
           {
-            "node": "key_takeaways",
+            "node": "Merge",
             "type": "main",
-            "index": 0
-          },
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "key_takeaways": {
+      "main": [
+        [
           {
-            "node": "gaps_and_limitations",
+            "node": "Merge",
             "type": "main",
-            "index": 0
-          },
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "main_theme": {
+      "main": [
+        [
           {
-            "node": "follow_up_questions",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "terminology_to_clarify",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "structural_observations",
+            "node": "Merge",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Webhook": {
+    "document_summary": {
       "main": [
         [
           {
-            "node": "Loop Over Items",
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Upload DOCX to Cloudinary": {
+      "main": [
+        [
+          {
+            "node": "Extract DOCX URL",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Set File ID": {
+    "Export Google Docs to DOCX": {
       "main": [
         [
           {
-            "node": "Loop Over Items",
+            "node": "Upload DOCX to Cloudinary",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Download File From Drive": {
+    "Extract DOCX URL": {
       "main": [
         [
           {
-            "node": "Extract PDF Text",
+            "node": "Save Analysis to Postgres",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Loop Over Items": {
+    "Google Drive1": {
       "main": [
         [
           {
-            "node": "2nd Loop Over Items",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Set File ID",
+            "node": "Respond to Webhook",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "2nd Loop Over Items": {
+    "Wait Before AI": {
       "main": [
-        [],
         [
           {
-            "node": "Download File From Drive",
+            "node": "comprehensive_analysis",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Google Docs": {
+    "Parse Combined Result": {
       "main": [
         [
           {
-            "node": "Google Drive",
+            "node": "Merge",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Google Drive": {
+    "comprehensive_analysis": {
       "main": [
         [
           {
-            "node": "Google Docs1",
+            "node": "Parse Combined Result",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Structured Output Parser": {
-      "ai_outputParser": [
-        [
-          {
-            "node": "main_theme",
-            "type": "ai_outputParser",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Merge": {
+    "Save Analysis to Postgres": {
       "main": [
         [
           {
-            "node": "Aggregate",
+            "node": "Google Drive1",
             "type": "main",
             "index": 0
           }
@@ -702,145 +639,24 @@
         ]
       ]
     },
-    "Structured Output Parser1": {
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser - Comprehensive": {
       "ai_outputParser": [
         [
           {
-            "node": "document_summary",
+            "node": "comprehensive_analysis",
             "type": "ai_outputParser",
             "index": 0
-          }
-        ]
-      ]
-    },
-    "Structured Output Parser2": {
-      "ai_outputParser": [
-        [
-          {
-            "node": "key_takeaways",
-            "type": "ai_outputParser",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Structured Output Parser3": {
-      "ai_outputParser": [
-        [
-          {
-            "node": "gaps_and_limitations",
-            "type": "ai_outputParser",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Structured Output Parser4": {
-      "ai_outputParser": [
-        [
-          {
-            "node": "follow_up_questions",
-            "type": "ai_outputParser",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Structured Output Parser5": {
-      "ai_outputParser": [
-        [
-          {
-            "node": "terminology_to_clarify",
-            "type": "ai_outputParser",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Structured Output Parser6": {
-      "ai_outputParser": [
-        [
-          {
-            "node": "structural_observations",
-            "type": "ai_outputParser",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "document_summary": {
-      "main": [
-        [
-          {
-            "node": "Merge",
-            "type": "main",
-            "index": 1
-          }
-        ]
-      ]
-    },
-    "main_theme": {
-      "main": [
-        [
-          {
-            "node": "Merge",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "key_takeaways": {
-      "main": [
-        [
-          {
-            "node": "Merge",
-            "type": "main",
-            "index": 2
-          }
-        ]
-      ]
-    },
-    "gaps_and_limitations": {
-      "main": [
-        [
-          {
-            "node": "Merge",
-            "type": "main",
-            "index": 3
-          }
-        ]
-      ]
-    },
-    "follow_up_questions": {
-      "main": [
-        [
-          {
-            "node": "Merge",
-            "type": "main",
-            "index": 4
-          }
-        ]
-      ]
-    },
-    "terminology_to_clarify": {
-      "main": [
-        [
-          {
-            "node": "Merge",
-            "type": "main",
-            "index": 5
-          }
-        ]
-      ]
-    },
-    "structural_observations": {
-      "main": [
-        [
-          {
-            "node": "Merge",
-            "type": "main",
-            "index": 6
           }
         ]
       ]
@@ -849,18 +665,103 @@
       "main": [
         [
           {
-            "node": "Google Drive1",
+            "node": "Export Google Docs to DOCX",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Google Drive1": {
+    "Google Drive": {
+      "main": [
+        [
+          {
+            "node": "Google Docs1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Docs": {
+      "main": [
+        [
+          {
+            "node": "Google Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2nd Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Download File From URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
       "main": [
         [
           {
             "node": "2nd Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set File Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download File From URL": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set File Data": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF Text": {
+      "main": [
+        [
+          {
+            "node": "Wait Before AI",
             "type": "main",
             "index": 0
           }
@@ -871,37 +772,7 @@
       "ai_languageModel": [
         [
           {
-            "node": "main_theme",
-            "type": "ai_languageModel",
-            "index": 0
-          },
-          {
-            "node": "document_summary",
-            "type": "ai_languageModel",
-            "index": 0
-          },
-          {
-            "node": "key_takeaways",
-            "type": "ai_languageModel",
-            "index": 0
-          },
-          {
-            "node": "gaps_and_limitations",
-            "type": "ai_languageModel",
-            "index": 0
-          },
-          {
-            "node": "follow_up_questions",
-            "type": "ai_languageModel",
-            "index": 0
-          },
-          {
-            "node": "terminology_to_clarify",
-            "type": "ai_languageModel",
-            "index": 0
-          },
-          {
-            "node": "structural_observations",
+            "node": "comprehensive_analysis",
             "type": "ai_languageModel",
             "index": 0
           }
@@ -913,11 +784,11 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "2489a65c-4435-4477-8584-d7f38061b828",
+  "versionId": "e465aad3-cd5a-4eab-9e19-4e674bfe71fd",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "d29aff038a4897a8be0d9843c07ba06d6b485556105b19c20835a7b0bfd5b9b2"
   },
-  "id": "XoHMfHi0FLNWjqeF",
+  "id": "9ucTmgO083P7qCGQ",
   "tags": []
 }
