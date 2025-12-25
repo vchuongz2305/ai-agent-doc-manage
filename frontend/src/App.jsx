@@ -22,7 +22,8 @@ function App() {
     ],
     'Finance': [
       { id: 'user005', name: 'Hoàng Thị E', email: 'hoangthie@company.com' },
-      { id: 'user006', name: 'Vũ Văn F', email: 'vuvanf@company.com' }
+      { id: 'user006', name: 'Vũ Văn F', email: 'vuvanf@company.com' },
+      { id: 'user007', name: 'Phạm H', email: 'hpham@company.com' }
     ]
   };
 
@@ -323,7 +324,7 @@ function App() {
               )}
 
               <div className="form-group">
-                <label htmlFor="sharingEmails">📧 Sharing Emails (tự động):</label>
+                <label htmlFor="sharingEmails">📧 Sharing Emails:</label>
                 <textarea 
                   id="sharingEmails" 
                   value={sharingEmails}
