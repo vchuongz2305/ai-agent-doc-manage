@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
+import { mockGDPRData, mockGDPRDataAllow, mockGDPRDataDelete } from './mockGDPRData';
 
 function App() {
   const [file, setFile] = useState(null);
@@ -339,6 +340,25 @@ function App() {
               </button>
             </form>
 
+            {/* Demo GDPR Buttons */}
+            <div className="demo-section">
+              <h3>🧪 Demo GDPR Results:</h3>
+              <div className="demo-buttons">
+                <button className="demo-btn allow" onClick={() => setStatus(mockGDPRDataAllow)}>
+                  ✅ ALLOW
+                </button>
+                <button className="demo-btn anonymize" onClick={() => setStatus(mockGDPRData)}>
+                  🔒 ANONYMIZE
+                </button>
+                <button className="demo-btn delete" onClick={() => setStatus(mockGDPRDataDelete)}>
+                  🗑️ DELETE
+                </button>
+                <button className="demo-btn clear" onClick={() => setStatus(null)}>
+                  🔄 Clear
+                </button>
+              </div>
+            </div>
+
             {loading && (
               <div className="loading">
                 <div className="spinner"></div>
@@ -395,13 +415,120 @@ function App() {
                 )}
 
                 {status.results.gdpr && (
-                  <div className="result-card">
-                    <h3>⚖️ GDPR Compliance</h3>
-                    <div className="result-content">
-                      <p><strong>Decision:</strong> {status.results.gdpr.gdprDecision || 'Unknown'}</p>
-                      <p><strong>Personal Data Found:</strong> {status.results.gdpr.personalDataFound ? status.results.gdpr.personalDataFound.join(', ') : 'None'}</p>
-                      <p><strong>Sensitive Data:</strong> {status.results.gdpr.sensitiveDataDetected ? 'Yes' : 'No'}</p>
-                      <p><strong>DPO Notification:</strong> {status.results.gdpr.notifyDPO ? 'Required' : 'Not required'}</p>
+                  <div className={`result-card gdpr-card gdpr-${status.results.gdpr.gdprDecision?.toLowerCase() || 'unknown'}`}>
+                    <div className="card-header">
+                      <h3>⚖️ GDPR Compliance Check</h3>
+                      <span className={`gdpr-badge gdpr-badge-${status.results.gdpr.gdprDecision?.toLowerCase() || 'unknown'}`}>
+                        {status.results.gdpr.gdprDecision?.toUpperCase() || 'UNKNOWN'}
+                      </span>
+                    </div>
+                    
+                    <div className="result-content gdpr-content">
+                      {/* Decision Section */}
+                      <div className="gdpr-section">
+                        <div className="section-title">📋 Decision Summary</div>
+                        <div className="gdpr-decision-box">
+                          <div className="decision-icon">
+                            {status.results.gdpr.gdprDecision === 'allow' ? '✅' : 
+                             status.results.gdpr.gdprDecision === 'anonymize' ? '🔒' : 
+                             status.results.gdpr.gdprDecision === 'delete' ? '🗑️' : '❓'}
+                          </div>
+                          <div className="decision-text">
+                            <strong>Action:</strong> {status.results.gdpr.gdprDecision?.toUpperCase() || 'UNKNOWN'}
+                            <p className="decision-justification">
+                              {status.results.gdpr.gdprJustification || 'No justification provided'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Personal Data Section */}
+                      <div className="gdpr-section">
+                        <div className="section-title">🔍 Data Analysis</div>
+                        <div className="gdpr-info-grid">
+                          <div className="info-item">
+                            <span className="info-label">Personal Data Found:</span>
+                            <span className="info-value">
+                              {status.results.gdpr.personalDataFound && status.results.gdpr.personalDataFound.length > 0 ? (
+                                <div className="data-tags">
+                                  {status.results.gdpr.personalDataFound.map((data, idx) => (
+                                    <span key={idx} className="data-tag">{data}</span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="no-data">None detected</span>
+                              )}
+                            </span>
+                          </div>
+
+                          <div className="info-item">
+                            <span className="info-label">Sensitive Data:</span>
+                            <span className={`info-value ${status.results.gdpr.sensitiveDataDetected ? 'sensitive-yes' : 'sensitive-no'}`}>
+                              {status.results.gdpr.sensitiveDataDetected ? '⚠️ Yes' : '✅ No'}
+                            </span>
+                          </div>
+
+                          <div className="info-item">
+                            <span className="info-label">Data Volume:</span>
+                            <span className="info-value">
+                              {status.results.gdpr.dataVolume ? (
+                                <span className={`volume-badge volume-${status.results.gdpr.dataVolume}`}>
+                                  {status.results.gdpr.dataVolume.toUpperCase()}
+                                </span>
+                              ) : 'Unknown'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Legal Basis Section */}
+                      <div className="gdpr-section">
+                        <div className="section-title">📜 Legal & Compliance</div>
+                        <div className="gdpr-info-grid">
+                          <div className="info-item">
+                            <span className="info-label">Legal Basis:</span>
+                            <span className="info-value">
+                              {status.results.gdpr.legalBasis || 'Not specified'}
+                            </span>
+                          </div>
+
+                          <div className="info-item">
+                            <span className="info-label">Retention Period:</span>
+                            <span className="info-value">
+                              {status.results.gdpr.retentionDays ? `${status.results.gdpr.retentionDays} days` : 'N/A'}
+                            </span>
+                          </div>
+
+                          <div className="info-item">
+                            <span className="info-label">DPO Notification:</span>
+                            <span className={`info-value ${status.results.gdpr.notifyDPO ? 'dpo-required' : 'dpo-not-required'}`}>
+                              {status.results.gdpr.notifyDPO ? '🔔 Required' : '✅ Not Required'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Redaction Fields (if anonymize) */}
+                      {status.results.gdpr.gdprDecision === 'anonymize' && status.results.gdpr.redactionFields && status.results.gdpr.redactionFields.length > 0 && (
+                        <div className="gdpr-section">
+                          <div className="section-title">🔒 Fields to Redact</div>
+                          <div className="redaction-list">
+                            {status.results.gdpr.redactionFields.map((field, idx) => (
+                              <span key={idx} className="redaction-tag">{field}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Timestamp */}
+                      <div className="gdpr-footer">
+                        <small>
+                          📅 Decision made at: {status.results.gdpr.aiDecisionTimestamp ? 
+                            new Date(status.results.gdpr.aiDecisionTimestamp).toLocaleString('vi-VN') : 
+                            'N/A'
+                          }
+                        </small>
+                      </div>
                     </div>
                   </div>
                 )}
