@@ -1,0 +1,735 @@
+{
+  "name": "Test 2 - With Retry & Delay",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "id": "0f66a7f2-4e54-442f-b64b-6f6a3bbeaa4b",
+      "name": "Extract PDF Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -1440,
+        -608
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "0f8bc803-94c0-4689-92de-1ae03bc6e1a0",
+              "name": "name",
+              "value": "={{ $json.body.file.name || $json.file.name || $json.name || 'document.pdf' }}",
+              "type": "string"
+            },
+            {
+              "id": "b215de7b-64c4-4125-8d5e-4445b5a7f85a",
+              "name": "file_url",
+              "value": "={{ $json.body.file.url || $json.file.url || $json.fileUrl }}",
+              "type": "string"
+            },
+            {
+              "id": "c3d4e5f6-7890-1234-5678-9abcdef01234",
+              "name": "processingId",
+              "value": "={{ $json.body.processingId || $json.processingId }}",
+              "type": "string"
+            },
+            {
+              "id": "d4e5f6a7-8901-2345-6789-bcdef0123456",
+              "name": "userId",
+              "value": "={{ $json.body.userId || $json.userId }}",
+              "type": "string"
+            },
+            {
+              "id": "e5f6a7b8-9012-3456-789a-cdef01234567",
+              "name": "department",
+              "value": "={{ $json.body.department || $json.department }}",
+              "type": "string"
+            },
+            {
+              "id": "f6a7b8c9-0123-4567-890a-bcdef0123456",
+              "name": "cloudinary_url",
+              "value": "={{ $json.body.file.cloudinary_url || $json.body.file.url || $json.file.cloudinary_url || $json.file.url }}",
+              "type": "string"
+            },
+            {
+              "id": "a7b8c9d0-1234-5678-901a-cdef01234567",
+              "name": "cloudinary_public_id",
+              "value": "={{ $json.body.file.cloudinary_public_id || $json.file.cloudinary_public_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0b9e4213-3548-4833-b786-50d5e8ded448",
+      "name": "Set File Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2080,
+        -464
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Set File Data').item.json.cloudinary_url || $('Set File Data').item.json.file_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "f37f2fff-0e75-477b-ace2-486b64af721f",
+      "name": "Download File From URL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1664,
+        -544
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -2224,
+        -608
+      ],
+      "id": "f95fe0c2-26d5-42f7-a0a0-476ce1780701",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -1904,
+        -688
+      ],
+      "id": "2b0e4de4-c794-451d-a04a-725876c0b0c3",
+      "name": "2nd Loop Over Items"
+    },
+    {
+      "parameters": {
+        "folderId": "14faxpPz6EOGRI14HAEgSI85EWpBZrFkX",
+        "title": "={{ $('Set File Data').item.json.name.replace(/\\.pdf$/i, '') }} PDF Summary"
+      },
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        288,
+        -624
+      ],
+      "id": "3c51e7aa-c7a3-4008-b75d-5950bb9ef3bb",
+      "name": "Google Docs",
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "1amL3txBes4rtT8G",
+          "name": "Google Docs account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "driveId": {
+          "__rl": true,
+          "value": "My Drive",
+          "mode": "list",
+          "cachedResultName": "My Drive",
+          "cachedResultUrl": "https://drive.google.com/drive/my-drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "19dKOR2bA5dHGHCtfZ416c5qVou0lcDwF",
+          "mode": "list",
+          "cachedResultName": "Extract PDF",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/19dKOR2bA5dHGHCtfZ416c5qVou0lcDwF"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        496,
+        -624
+      ],
+      "id": "b9fc79f5-9668-409c-bceb-537f4ab13abe",
+      "name": "Google Drive",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "atJ86VdDoYyS4tiT",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentURL": "={{ $('Google Docs').item.json.id }}",
+        "actionsUi": {
+          "actionFields": [
+            {
+              "action": "insert",
+              "text": "={{ $json.name }}\n\n\n{{ $json.main_theme.output.main_theme }}\n\n{{ $json.document_summary.output.document_summary.map(section => `📌 ${section.section_title}:\\n${section.content}`).join('\\n\\n') }}\n\n\n---\n\n\nKey Takeaways\n\n{{ \n  $json.key_takeaways.output.key_takeaways\n    .map(takeaway => `- ${takeaway.point}:\\n${takeaway.context}`)\n    .join('\\n\\n') \n}}\n\n\n---\n\n\nGaps & Limitations\n\n{{ \n  $json.gaps_and_limitations.output.gaps_and_limitations\n    .map(gap => `- ${gap.issue}:\\n${gap.reason}`)\n    .join('\\n\\n') \n}}\n\n\n\n---\n\n\nFollow-Up Questions\n\n{{ \n  $json.follow_up_questions.output.follow_up_questions\n    .map(question => `?? ${question}`)\n    .join('\\n\\n') \n}}\n\n\n---\n\n\nTerminology To Clarify\n\n{{ \n  $json.terminology_to_clarify.output.terminology_to_clarify\n    .map(entry => `- ${entry.term}:\\n${entry.explanation}`)\n    .join('\\n\\n') \n}}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        720,
+        -624
+      ],
+      "id": "32ccae85-9985-4356-bda9-6810b014fa31",
+      "name": "Google Docs1",
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "1amL3txBes4rtT8G",
+          "name": "Google Docs account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"main_theme\": \"Three sentences: topic, purpose, audience\",\n  \"document_summary\": [\n    {\n      \"section_title\": \"Section title\",\n      \"content\": \"Section summary\"\n    }\n  ],\n  \"key_takeaways\": [\n    {\n      \"point\": \"Key point\",\n      \"context\": \"Explanation\"\n    }\n  ],\n  \"gaps_and_limitations\": [\n    {\n      \"issue\": \"Gap description\",\n      \"reason\": \"Why it matters\"\n    }\n  ],\n  \"follow_up_questions\": [\n    \"Question 1\",\n    \"Question 2\"\n  ],\n  \"terminology_to_clarify\": [\n    {\n      \"term\": \"Term\",\n      \"explanation\": \"Definition\"\n    }\n  ]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        -800,
+        -800
+      ],
+      "id": "comprehensive-parser-001",
+      "name": "Structured Output Parser - Comprehensive"
+    },
+    {
+      "parameters": {
+        "numberInputs": 1
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        -208,
+        -704
+      ],
+      "id": "c37c352e-11a7-4015-bff2-3ed418f069e4",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        48,
+        -624
+      ],
+      "id": "f2796bc0-f4c4-4999-812e-cbdc0ba019e4",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO documents (processing_id, file_name, file_url, user_id, department, status, analysis_results, cloudinary_url, docx_url, created_at, updated_at, analysis_completed_at) VALUES ('{{ $('Set File Data').item.json.processingId }}', '{{ $('Set File Data').item.json.name }}', '{{ $('Set File Data').item.json.file_url }}', '{{ $('Set File Data').item.json.userId }}', '{{ $('Set File Data').item.json.department }}', 'completed', '{{ JSON.stringify($json).replace(/'/g, \"''\") }}'::jsonb, '{{ $('Set File Data').item.json.cloudinary_url || $('Set File Data').item.json.file_url }}', '{{ $json.docx_url || '' }}', NOW(), NOW(), NOW()) ON CONFLICT (processing_id) DO UPDATE SET status = 'completed', analysis_results = EXCLUDED.analysis_results, cloudinary_url = EXCLUDED.cloudinary_url, docx_url = COALESCE(NULLIF(EXCLUDED.docx_url, ''), documents.docx_url), updated_at = NOW(), analysis_completed_at = NOW() RETURNING *;",
+        "options": {}
+      },
+      "id": "8a52f2f1-2b71-4c29-b50a-644343b34026",
+      "name": "Save Analysis to Postgres",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1152,
+        -624
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=**Document Title:** {{ $('Set File Data').item.json.name }}\n\n**Document Text:** {{ $json.text }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=YOU ARE A COMPREHENSIVE DOCUMENT ANALYSIS AGENT. YOU MUST ANALYZE A DOCUMENT AND OUTPUT ALL ANALYSIS RESULTS IN A SINGLE JSON OBJECT.\n\nYOUR TASK:\n1. Identify the main theme and purpose\n2. Create a section-by-section summary\n3. Extract key takeaways\n4. Identify gaps and limitations\n5. Generate follow-up questions\n6. Clarify terminology\n\nOUTPUT FORMAT (MANDATORY JSON):\n{\n  \"main_theme\": \"Three sentences: topic, purpose, audience\",\n  \"document_summary\": [\n    {\n      \"section_title\": \"Section title\",\n      \"content\": \"Section summary\"\n    }\n  ],\n  \"key_takeaways\": [\n    {\n      \"point\": \"Key point\",\n      \"context\": \"Explanation\"\n    }\n  ],\n  \"gaps_and_limitations\": [\n    {\n      \"issue\": \"Gap description\",\n      \"reason\": \"Why it matters\"\n    }\n  ],\n  \"follow_up_questions\": [\n    \"Question 1\",\n    \"Question 2\"\n  ],\n  \"terminology_to_clarify\": [\n    {\n      \"term\": \"Term\",\n      \"explanation\": \"Definition\"\n    }\n  ]\n}\n\nREQUIREMENTS:\n- Return ONLY valid JSON, no markdown code blocks (no ```json)\n- All fields are required\n- Be specific and accurate\n- main_theme: 3 sentences (topic, purpose, audience)\n- document_summary: Array of sections with title and content\n- key_takeaways: 3-7 items with point and context\n- gaps_and_limitations: 1-5 items with issue and reason\n- follow_up_questions: 3-7 open-ended questions\n- terminology_to_clarify: Array of terms with explanations\n\nIMPORTANT:\n- Do NOT wrap output in markdown code blocks\n- Output must be valid JSON that can be parsed directly\n- All arrays must have at least 1 item\n- Be concise but informative"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        -800
+      ],
+      "id": "comprehensive-analysis-001",
+      "name": "comprehensive_analysis",
+      "settings": {
+        "errorHandling": {
+          "retry": {
+            "enabled": true,
+            "maxRetries": 5,
+            "retryDelay": 30000
+          }
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse kết quả từ comprehensive_analysis node\nconst aiResult = $json.output || $json;\n\nconsole.log('Raw AI Result:', JSON.stringify(aiResult, null, 2));\n\n// Parse và format giống như 6 node cũ để tương thích với Merge node\nlet parsed = {};\n\ntry {\n  // Nếu AI trả về string, parse JSON\n  let parsedData = aiResult;\n  if (typeof aiResult === 'string') {\n    // Loại bỏ markdown code blocks nếu có\n    const cleanJson = aiResult\n      .replace(/```json/gi, '')\n      .replace(/```/g, '')\n      .trim();\n    \n    // Tìm JSON trong string\n    const jsonMatch = cleanJson.match(/\\{[\\s\\S]*\\}/);\n    if (jsonMatch) {\n      parsedData = JSON.parse(jsonMatch[0]);\n    } else {\n      parsedData = JSON.parse(cleanJson);\n    }\n  }\n  \n  // Format để tương thích với Merge node\n  parsed = {\n    // main_theme format\n    main_theme: {\n      output: {\n        main_theme: parsedData.main_theme || \"\"\n      }\n    },\n    \n    // document_summary format\n    document_summary: {\n      output: {\n        document_summary: Array.isArray(parsedData.document_summary) \n          ? parsedData.document_summary \n          : []\n      }\n    },\n    \n    // key_takeaways format\n    key_takeaways: {\n      output: {\n        key_takeaways: Array.isArray(parsedData.key_takeaways) \n          ? parsedData.key_takeaways \n          : []\n      }\n    },\n    \n    // gaps_and_limitations format\n    gaps_and_limitations: {\n      output: {\n        gaps_and_limitations: Array.isArray(parsedData.gaps_and_limitations) \n          ? parsedData.gaps_and_limitations \n          : []\n      }\n    },\n    \n    // follow_up_questions format\n    follow_up_questions: {\n      output: {\n        follow_up_questions: Array.isArray(parsedData.follow_up_questions) \n          ? parsedData.follow_up_questions \n          : []\n      }\n    },\n    \n    // terminology_to_clarify format\n    terminology_to_clarify: {\n      output: {\n        terminology_to_clarify: Array.isArray(parsedData.terminology_to_clarify) \n          ? parsedData.terminology_to_clarify \n          : []\n      }\n    }\n  };\n  \n  console.log('Parsed Result:', JSON.stringify(parsed, null, 2));\n  \n} catch (error) {\n  console.error('Error parsing AI result:', error);\n  console.error('Raw data:', aiResult);\n  \n  // Fallback với empty data\n  parsed = {\n    main_theme: { output: { main_theme: \"Error parsing AI result\" } },\n    document_summary: { output: { document_summary: [] } },\n    key_takeaways: { output: { key_takeaways: [] } },\n    gaps_and_limitations: { output: { gaps_and_limitations: [] } },\n    follow_up_questions: { output: { follow_up_questions: [] } },\n    terminology_to_clarify: { output: { terminology_to_clarify: [] } }\n  };\n}\n\n// Return format tương thích với Merge node\nreturn [{\n  json: {\n    name: $('Set File Data').item.json.name,\n    main_theme: parsed.main_theme,\n    document_summary: parsed.document_summary,\n    key_takeaways: parsed.key_takeaways,\n    gaps_and_limitations: parsed.gaps_and_limitations,\n    follow_up_questions: parsed.follow_up_questions,\n    terminology_to_clarify: parsed.terminology_to_clarify\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -640,
+        -800
+      ],
+      "id": "parse-combined-001",
+      "name": "Parse Combined Result"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Delay 15-20 giây trước khi gọi Gemini API để tránh rate limit\n// Tăng delay để đảm bảo không vượt quota\nconst baseDelay = 15000; // 15 giây\nconst randomDelay = Math.random() * 5000; // Thêm 0-5 giây ngẫu nhiên\nconst totalDelay = baseDelay + randomDelay;\n\nconsole.log(`⏳ Waiting ${Math.round(totalDelay/1000)}s before AI call to avoid rate limit...`);\nawait new Promise(resolve => setTimeout(resolve, totalDelay));\nconsole.log('✅ Wait completed, proceeding to AI node');\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1120,
+        -800
+      ],
+      "id": "wait-before-ai-001",
+      "name": "Wait Before AI"
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Google Docs').item.json.id }}",
+          "mode": "id"
+        },
+        "driveId": {
+          "__rl": true,
+          "value": "My Drive",
+          "mode": "list",
+          "cachedResultName": "My Drive",
+          "cachedResultUrl": "https://drive.google.com/drive/my-drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "14faxpPz6EOGRI14HAEgSI85EWpBZrFkX",
+          "mode": "list",
+          "cachedResultName": "PDF Folder",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/14faxpPz6EOGRI14HAEgSI85EWpBZrFkX"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        928,
+        -624
+      ],
+      "id": "6e583434-e3b5-4840-b0ce-bff4408a7b70",
+      "name": "Google Drive1",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "atJ86VdDoYyS4tiT",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -1280,
+        -928
+      ],
+      "id": "d149a4a2-e0a0-415a-b314-9bfd750414d0",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "XVtVZk5W7pbY5uMP",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "document-analyzer",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -2496,
+        -608
+      ],
+      "id": "e6d68df2-82c6-48d9-bac2-42205f4ef73e",
+      "name": "Webhook",
+      "webhookId": "8c724e88-5a5d-4919-82ba-760f48bf341f"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": true, \"processingId\": $('Set File Data').item.json.processingId, \"message\": \"Document analysis completed\", \"docx_url\": $json.docx_url || '' } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1376,
+        -624
+      ],
+      "id": "6e882c42-6d5a-466d-8c5b-38338b34e896",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Google Docs').item.json.id }}",
+          "mode": "id"
+        },
+        "options": {
+          "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        944,
+        -624
+      ],
+      "id": "export-docx-001",
+      "name": "Export Google Docs to DOCX",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "atJ86VdDoYyS4tiT",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://localhost:5000/api/cloudinary/upload",
+        "authentication": "none",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "processingId",
+              "value": "={{ $('Set File Data').item.json.processingId }}"
+            },
+            {
+              "name": "fileName",
+              "value": "={{ $('Set File Data').item.json.name.replace(/\\.pdf$/i, '') }}_Analysis.docx"
+            }
+          ]
+        },
+        "options": {
+          "bodyContentType": "multipart-form-data"
+        },
+        "sendBinaryData": true,
+        "binaryPropertyName": "data"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1104,
+        -624
+      ],
+      "id": "upload-docx-001",
+      "name": "Upload DOCX to Cloudinary"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lấy kết quả từ Upload DOCX node\nconst uploadResult = $json;\n\n// Extract docx_url từ response\nlet docxUrl = '';\n\ntry {\n  if (uploadResult.cloudinary && uploadResult.cloudinary.secure_url) {\n    docxUrl = uploadResult.cloudinary.secure_url;\n  } else if (uploadResult.secure_url) {\n    docxUrl = uploadResult.secure_url;\n  } else if (uploadResult.url) {\n    docxUrl = uploadResult.url;\n  }\n  \n  console.log('DOCX URL from Cloudinary:', docxUrl);\n} catch (error) {\n  console.error('Error extracting DOCX URL:', error);\n}\n\n// Lấy data từ Aggregate node (chứa analysis results)\nconst aggregateData = $('Aggregate').item.json || {};\n\n// Merge với docx_url\nreturn [{\n  json: {\n    ...aggregateData,\n    docx_url: docxUrl\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        -624
+      ],
+      "id": "extract-docx-url-001",
+      "name": "Extract DOCX URL"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Extract PDF Text": {
+      "main": [
+        [
+          {
+            "node": "Wait Before AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before AI": {
+      "main": [
+        [
+          {
+            "node": "comprehensive_analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set File Data": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download File From URL": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "2nd Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set File Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2nd Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Download File From URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Docs": {
+      "main": [
+        [
+          {
+            "node": "Google Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive": {
+      "main": [
+        [
+          {
+            "node": "Google Docs1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Docs1": {
+      "main": [
+        [
+          {
+            "node": "Export Google Docs to DOCX",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Export Google Docs to DOCX": {
+      "main": [
+        [
+          {
+            "node": "Upload DOCX to Cloudinary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload DOCX to Cloudinary": {
+      "main": [
+        [
+          {
+            "node": "Extract DOCX URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract DOCX URL": {
+      "main": [
+        [
+          {
+            "node": "Save Analysis to Postgres",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser - Comprehensive": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "comprehensive_analysis",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "comprehensive_analysis": {
+      "main": [
+        [
+          {
+            "node": "Parse Combined Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Combined Result": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Google Docs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Analysis to Postgres": {
+      "main": [
+        [
+          {
+            "node": "Google Drive1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "comprehensive_analysis",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "with-retry-delay-v2",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d29aff038a4897a8be0d9843c07ba06d6b485556105b19c20835a7b0bfd5b9b2"
+  },
+  "id": "9ucTmgO083P7qCGQ-with-retry",
+  "tags": []
+}
