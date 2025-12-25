@@ -19,8 +19,14 @@
         "method": "POST",
         "url": "=http://localhost:5000/api/cloudinary/upload",
         "sendBody": true,
+        "specifyBody": "multipart-form-data",
         "bodyParameters": {
           "parameters": [
+            {
+              "name": "file",
+              "value": "={{ $binary.data }}",
+              "parameterType": "file"
+            },
             {
               "name": "processingId",
               "value": "={{ $('Set File Data').item.json.processingId }}"
@@ -31,7 +37,10 @@
             }
           ]
         },
-        "options": {}
+        "options": {
+          "sendBinaryData": true,
+          "binaryPropertyName": "data"
+        }
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -466,8 +475,8 @@
       "name": "Google Gemini Chat Model",
       "credentials": {
         "googlePalmApi": {
-          "id": "Sz72Ry128fGJS5mV",
-          "name": "Google Gemini(PaLM) Api account 5"
+          "id": "lcV9ZKXO35qhNqk7",
+          "name": "Google Gemini(PaLM) Api account 6"
         }
       }
     }
@@ -784,7 +793,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "e465aad3-cd5a-4eab-9e19-4e674bfe71fd",
+  "versionId": "291a2298-37ca-4dea-ac54-618c28b016a0",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "d29aff038a4897a8be0d9843c07ba06d6b485556105b19c20835a7b0bfd5b9b2"
