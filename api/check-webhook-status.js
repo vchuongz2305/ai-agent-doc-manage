@@ -1,5 +1,6 @@
 const axios = require('axios');
-require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+// Load .env from project root
+require('../load-env');
 
 const N8N_BASE_URL = 'https://n8n.aidocmanageagent.io.vn';
 const WEBHOOK_URL = `${N8N_BASE_URL}/webhook/document-analyzer`;

@@ -1,40 +1,15 @@
 // Load path module first (needed for .env path resolution)
 const path = require('path');
 
-// Load environment variables
-try {
-  const dotenv = require('dotenv');
-  // Try multiple paths to find .env file
-  const envPaths = [
-    path.join(__dirname, '..', '.env'),  // From api/ directory
-    path.join(process.cwd(), '.env'),     // From current working directory
-    '.env'                                 // Relative to current directory
-  ];
-  
-  let loaded = false;
-  for (const envPath of envPaths) {
-    const result = dotenv.config({ path: envPath });
-    if (!result.error) {
-      console.log(`✅ Environment variables loaded from: ${envPath}`);
-      loaded = true;
-      break;
-    }
-  }
-  
-  if (!loaded) {
-    console.log('ℹ️ .env file not found in any of these locations:', envPaths);
-    console.log('   Using default/process.env values');
-  }
-} catch (e) {
-  // dotenv not installed, continue without it
-  console.log('ℹ️ dotenv not found, using default/process.env values');
-  console.log('   Error:', e.message);
-}
+// Load environment variables from project root .env file
+// This ensures all files use the same .env file
+require('../load-env');
 
 const express = require('express');
 const multer = require('multer');
 const axios = require('axios');
 const fs = require('fs');
+const { Pool } = require('pg');
 const cloudinary = require('cloudinary').v2;
 const { uploadFileToCloudinary } = require('./cloudinary-upload');
 const { downloadFileFromCloudinary, downloadFileFromCloudinaryUrl } = require('./cloudinary-download');
@@ -232,6 +207,37 @@ const RESULT_WEBHOOKS = {
 
 // Store processing status
 const processingStatus = new Map();
+
+// PostgreSQL Connection Pool
+const pgPool = new Pool({
+  host: process.env.POSTGRES_HOST || 'localhost',
+  port: process.env.POSTGRES_PORT || 5432,
+  database: process.env.POSTGRES_DATABASE || 'document_management',
+  user: process.env.POSTGRES_USER || 'doc_user',
+  password: process.env.POSTGRES_PASSWORD || '',
+  max: 20, // Maximum number of clients in the pool
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
+// Test PostgreSQL connection on startup
+pgPool.on('connect', () => {
+  console.log('✅ PostgreSQL connection established');
+});
+
+pgPool.on('error', (err) => {
+  console.error('❌ Unexpected PostgreSQL error:', err);
+});
+
+// Test connection
+pgPool.query('SELECT NOW()', (err, res) => {
+  if (err) {
+    console.warn('⚠️ PostgreSQL connection test failed:', err.message);
+    console.warn('   Make sure PostgreSQL is running and credentials are correct');
+  } else {
+    console.log('✅ PostgreSQL connection test successful');
+  }
+});
 
 // Unified Document Processing Endpoint
 // GET handler - returns endpoint information
@@ -1306,6 +1312,325 @@ app.post('/webhook/flow3-result', (req, res) => {
   }
   
   res.json({ success: true });
+});
+
+// ============================================
+// PostgreSQL Data Retrieval API Endpoints
+// ============================================
+
+/**
+ * GET /api/document/get-from-postgres/:processingId
+ * Lấy dữ liệu từ PostgreSQL theo processing_id
+ */
+app.get('/api/document/get-from-postgres/:processingId', async (req, res) => {
+  try {
+    const { processingId } = req.params;
+    
+    if (!processingId) {
+      return res.status(400).json({
+        success: false,
+        error: 'processingId is required'
+      });
+    }
+    
+    console.log(`📊 Fetching document from PostgreSQL: ${processingId}`);
+    
+    const query = `
+      SELECT 
+        id,
+        processing_id,
+        file_name,
+        file_url,
+        cloudinary_url,
+        user_id,
+        department,
+        status,
+        analysis_results,
+        docx_url,
+        created_at,
+        updated_at,
+        analysis_completed_at
+      FROM documents
+      WHERE processing_id = $1
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    
+    const result = await pgPool.query(query, [processingId]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Document not found',
+        processingId: processingId
+      });
+    }
+    
+    const document = result.rows[0];
+    
+    console.log(`✅ Document found: ${document.file_name}`);
+    
+    res.json({
+      success: true,
+      data: document
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fetching document from PostgreSQL:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch document from PostgreSQL',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/document/get-all-completed
+ * Lấy tất cả documents đã hoàn thành từ PostgreSQL
+ * Query params: limit, offset, userId, department
+ */
+app.get('/api/document/get-all-completed', async (req, res) => {
+  try {
+    const { 
+      limit = 50, 
+      offset = 0, 
+      userId, 
+      department,
+      status = 'completed'
+    } = req.query;
+    
+    console.log(`📊 Fetching completed documents from PostgreSQL:`, {
+      limit,
+      offset,
+      userId,
+      department,
+      status
+    });
+    
+    let query = `
+      SELECT 
+        id,
+        processing_id,
+        file_name,
+        file_url,
+        cloudinary_url,
+        user_id,
+        department,
+        status,
+        analysis_results,
+        docx_url,
+        created_at,
+        updated_at,
+        analysis_completed_at
+      FROM documents
+      WHERE status = $1
+    `;
+    
+    const queryParams = [status];
+    let paramIndex = 2;
+    
+    // Add filters
+    if (userId) {
+      query += ` AND user_id = $${paramIndex}`;
+      queryParams.push(userId);
+      paramIndex++;
+    }
+    
+    if (department) {
+      query += ` AND department = $${paramIndex}`;
+      queryParams.push(department);
+      paramIndex++;
+    }
+    
+    // Add ordering and pagination
+    query += ` ORDER BY analysis_completed_at DESC NULLS LAST, created_at DESC`;
+    query += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    queryParams.push(parseInt(limit), parseInt(offset));
+    
+    // Get total count
+    let countQuery = `SELECT COUNT(*) FROM documents WHERE status = $1`;
+    const countParams = [status];
+    
+    if (userId) {
+      countQuery += ` AND user_id = $2`;
+      countParams.push(userId);
+    }
+    
+    if (department) {
+      countQuery += ` AND department = $${countParams.length + 1}`;
+      countParams.push(department);
+    }
+    
+    const [result, countResult] = await Promise.all([
+      pgPool.query(query, queryParams),
+      pgPool.query(countQuery, countParams)
+    ]);
+    
+    const total = parseInt(countResult.rows[0].count);
+    
+    console.log(`✅ Found ${result.rows.length} documents (total: ${total})`);
+    
+    res.json({
+      success: true,
+      data: result.rows,
+      pagination: {
+        total,
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        hasMore: (parseInt(offset) + parseInt(limit)) < total
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fetching documents from PostgreSQL:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch documents from PostgreSQL',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/document/send-completed-data
+ * Lấy dữ liệu từ PostgreSQL và gửi đến API endpoint khác
+ * Body: { processingId, targetUrl, targetMethod, headers }
+ */
+app.post('/api/document/send-completed-data', async (req, res) => {
+  try {
+    const { 
+      processingId, 
+      targetUrl, 
+      targetMethod = 'POST',
+      headers = {},
+      includeAllFields = true
+    } = req.body;
+    
+    if (!processingId) {
+      return res.status(400).json({
+        success: false,
+        error: 'processingId is required'
+      });
+    }
+    
+    if (!targetUrl) {
+      return res.status(400).json({
+        success: false,
+        error: 'targetUrl is required'
+      });
+    }
+    
+    console.log(`📤 Fetching and sending document data:`, {
+      processingId,
+      targetUrl,
+      targetMethod
+    });
+    
+    // Fetch from PostgreSQL
+    const query = `
+      SELECT 
+        id,
+        processing_id,
+        file_name,
+        file_url,
+        cloudinary_url,
+        user_id,
+        department,
+        status,
+        analysis_results,
+        docx_url,
+        created_at,
+        updated_at,
+        analysis_completed_at
+      FROM documents
+      WHERE processing_id = $1
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    
+    const result = await pgPool.query(query, [processingId]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Document not found',
+        processingId: processingId
+      });
+    }
+    
+    const document = result.rows[0];
+    
+    // Prepare data to send
+    let dataToSend = document;
+    
+    if (!includeAllFields) {
+      // Only send essential fields
+      dataToSend = {
+        processing_id: document.processing_id,
+        file_name: document.file_name,
+        file_url: document.file_url,
+        cloudinary_url: document.cloudinary_url,
+        user_id: document.user_id,
+        department: document.department,
+        status: document.status,
+        analysis_results: document.analysis_results,
+        docx_url: document.docx_url
+      };
+    }
+    
+    // Send to target URL
+    const axiosConfig = {
+      method: targetMethod.toLowerCase(),
+      url: targetUrl,
+      data: dataToSend,
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers
+      },
+      timeout: 30000
+    };
+    
+    console.log(`📤 Sending data to ${targetUrl}...`);
+    const response = await axios(axiosConfig);
+    
+    console.log(`✅ Data sent successfully:`, {
+      status: response.status,
+      targetUrl
+    });
+    
+    res.json({
+      success: true,
+      message: 'Data fetched and sent successfully',
+      document: document,
+      targetResponse: {
+        status: response.status,
+        data: response.data
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error sending document data:', error);
+    
+    if (error.response) {
+      // Target API returned an error
+      return res.status(error.response.status).json({
+        success: false,
+        error: 'Failed to send data to target API',
+        message: error.message,
+        targetResponse: {
+          status: error.response.status,
+          data: error.response.data
+        }
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch or send document data',
+      message: error.message
+    });
+  }
 });
 
 // Serve uploaded files

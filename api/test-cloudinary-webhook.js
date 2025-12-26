@@ -7,7 +7,8 @@ const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
 const FormData = require('form-data');
-require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+// Load .env from project root
+require('../load-env');
 
 // Use localhost for testing, not the n8n domain
 const API_BASE_URL = process.env.TEST_API_URL || 'http://localhost:5000';

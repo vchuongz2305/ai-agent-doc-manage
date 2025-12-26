@@ -5,7 +5,8 @@
 
 const path = require('path');
 const cloudinary = require('cloudinary').v2;
-require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+// Load .env from project root
+require('../load-env');
 
 // Cấu hình Cloudinary
 cloudinary.config({

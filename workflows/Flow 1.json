@@ -3,92 +3,17 @@
   "nodes": [
     {
       "parameters": {
-        "jsCode": "// Lấy kết quả từ Upload DOCX node\nconst uploadResult = $json;\n\n// Extract docx_url từ response\nlet docxUrl = '';\n\ntry {\n  if (uploadResult.cloudinary && uploadResult.cloudinary.secure_url) {\n    docxUrl = uploadResult.cloudinary.secure_url;\n  } else if (uploadResult.secure_url) {\n    docxUrl = uploadResult.secure_url;\n  } else if (uploadResult.url) {\n    docxUrl = uploadResult.url;\n  }\n  \n  console.log('DOCX URL from Cloudinary:', docxUrl);\n} catch (error) {\n  console.error('Error extracting DOCX URL:', error);\n}\n\n// Lấy data từ Aggregate node (chứa analysis results)\nconst aggregateData = $('Aggregate').item.json || {};\n\n// Merge với docx_url\nreturn [{\n  json: {\n    ...aggregateData,\n    docx_url: docxUrl\n  }\n}];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1072,
-        816
-      ],
-      "id": "3914e249-fe6d-4e3d-955b-accb3b60a781",
-      "name": "Extract DOCX URL"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "=http://localhost:5000/api/cloudinary/upload",
-        "sendBody": true,
-        "specifyBody": "multipart-form-data",
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "file",
-              "value": "={{ $binary.data }}",
-              "parameterType": "file"
-            },
-            {
-              "name": "processingId",
-              "value": "={{ $('Set File Data').item.json.processingId }}"
-            },
-            {
-              "name": "fileName",
-              "value": "={{ $('Set File Data').item.json.name.replace(/\\.pdf$/i, '') }}_Analysis.docx"
-            }
-          ]
-        },
-        "options": {
-          "sendBinaryData": true,
-          "binaryPropertyName": "data"
-        }
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1072,
-        592
-      ],
-      "id": "4cb31a84-f58c-4f8e-9b26-3e8f4cb5e5e4",
-      "name": "Upload DOCX to Cloudinary"
-    },
-    {
-      "parameters": {
-        "operation": "download",
-        "fileId": {
-          "__rl": true,
-          "value": "={{ $('Google Docs').item.json.id }}",
-          "mode": "id"
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.googleDrive",
-      "typeVersion": 3,
-      "position": [
-        1936,
-        432
-      ],
-      "id": "35ae9873-d7a5-496f-bd57-6c8c7f7db53b",
-      "name": "Export Google Docs to DOCX",
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "atJ86VdDoYyS4tiT",
-          "name": "Google Drive account 2"
-        }
-      }
-    },
-    {
-      "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ { \"success\": true, \"processingId\": $('Set File Data').item.json.processingId, \"message\": \"Document analysis completed\", \"docx_url\": $json.docx_url || '' } }}",
+        "responseBody": "={{ (() => { try { const data = $json || {}; if (!data || typeof data !== 'object') { return { success: false, error: 'No data received', processingId: '', message: 'Error: No data from previous node', file_url: '', analysis_results: {}, api_url: '', file_name: '' }; } const processingId = (data.processingId || data.processing_id || '').toString(); const fileUrl = (data.file_url || data.cloudinary_url || '').toString(); const fileName = (data.file_name || '').toString(); const analysisResults = data.analysis_results || {}; const apiUrl = processingId ? `https://api.aidocmanageagent.io.vn/api/document/get-from-postgres/${processingId}` : ''; const result = { success: data.success !== undefined ? Boolean(data.success) : true, processingId: processingId, message: (data.message || 'Document analysis completed').toString(), file_url: fileUrl, file_name: fileName, analysis_results: analysisResults, api_url: apiUrl, note: 'Flow 2 và Flow 3 có thể gọi API này để lấy dữ liệu đầy đủ' }; return result; } catch (e) { console.error('Error in response body:', e); return { success: false, error: (e.message || 'Unknown error').toString(), processingId: '', message: 'Error processing data', file_url: '', file_name: '', analysis_results: {}, api_url: '' }; } })() }}",
         "options": {}
       },
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        1760,
-        816
+        -64,
+        1072
       ],
-      "id": "1e89f6aa-c1a7-40c0-9969-77be9d1a497b",
+      "id": "a0d41a6d-6147-4d2e-9e73-8d118f791a0f",
       "name": "Respond to Webhook"
     },
     {
@@ -103,50 +28,25 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        -464,
-        32
+        -2288,
+        288
       ],
-      "id": "53096178-9aa4-40a8-8c11-ccb8ffcf4531",
+      "id": "259dac9c-1c79-4021-9fc4-4f4a398ce8b6",
       "name": "Webhook",
       "webhookId": "8c724e88-5a5d-4919-82ba-760f48bf341f"
     },
     {
       "parameters": {
-        "operation": "move",
-        "fileId": {
-          "__rl": true,
-          "value": "={{ $('Google Docs').item.json.id }}",
-          "mode": "id"
-        },
-        "driveId": {
-          "__rl": true,
-          "value": "My Drive",
-          "mode": "list",
-          "cachedResultName": "My Drive",
-          "cachedResultUrl": "https://drive.google.com/drive/my-drive"
-        },
-        "folderId": {
-          "__rl": true,
-          "value": "14faxpPz6EOGRI14HAEgSI85EWpBZrFkX",
-          "mode": "list",
-          "cachedResultName": "PDF Folder",
-          "cachedResultUrl": "https://drive.google.com/drive/folders/14faxpPz6EOGRI14HAEgSI85EWpBZrFkX"
-        }
+        "jsCode": "// Lấy data từ Postgres node (đã có RETURNING *)\nconst postgresData = $json || {};\n\n// Kiểm tra nếu postgresData là undefined hoặc null\nif (!postgresData || typeof postgresData !== 'object') {\n  console.error('❌ Postgres data is invalid:', postgresData);\n  return [{\n    json: {\n      success: false,\n      processingId: '',\n      message: 'Error: Could not retrieve data from Postgres',\n      file_url: '',\n      analysis_results: {}\n    }\n  }];\n}\n\n// Extract các trường cần thiết từ Postgres response\nconst processingId = postgresData.processing_id || postgresData.processingId || '';\n\n// Lấy PDF URL từ Cloudinary (cloudinary_url hoặc file_url)\nconst fileUrl = postgresData.cloudinary_url || postgresData.file_url || '';\n\n// Lấy analysis results và flatten cấu trúc\nlet analysisResults = postgresData.analysis_results || {};\n\n// Nếu analysis_results có cấu trúc nested (data[0]), extract ra\nif (analysisResults && analysisResults.data && Array.isArray(analysisResults.data) && analysisResults.data.length > 0) {\n  const firstItem = analysisResults.data[0];\n  // Flatten cấu trúc: extract main_theme, key_takeaways, etc. từ nested structure\n  analysisResults = {\n    main_theme: firstItem.main_theme?.output?.main_theme || firstItem.main_theme?.main_theme || '',\n    document_summary: firstItem.document_summary?.output?.document_summary || firstItem.document_summary?.document_summary || [],\n    key_takeaways: firstItem.key_takeaways?.output?.key_takeaways || firstItem.key_takeaways?.key_takeaways || [],\n    gaps_and_limitations: firstItem.gaps_and_limitations?.output?.gaps_and_limitations || firstItem.gaps_and_limitations?.gaps_and_limitations || [],\n    follow_up_questions: firstItem.follow_up_questions?.output?.follow_up_questions || firstItem.follow_up_questions?.follow_up_questions || [],\n    terminology_to_clarify: firstItem.terminology_to_clarify?.output?.terminology_to_clarify || firstItem.terminology_to_clarify?.terminology_to_clarify || []\n  };\n} else if (analysisResults && typeof analysisResults === 'object') {\n  // Nếu đã là object phẳng, giữ nguyên nhưng đảm bảo có các trường cần thiết\n  analysisResults = {\n    main_theme: analysisResults.main_theme || '',\n    document_summary: analysisResults.document_summary || [],\n    key_takeaways: analysisResults.key_takeaways || [],\n    gaps_and_limitations: analysisResults.gaps_and_limitations || [],\n    follow_up_questions: analysisResults.follow_up_questions || [],\n    terminology_to_clarify: analysisResults.terminology_to_clarify || []\n  };\n}\n\nconsole.log('📊 Data from Postgres:');\nconsole.log('   Processing ID:', processingId);\nconsole.log('   File URL (PDF):', fileUrl);\nconsole.log('   Analysis Results (flattened):', JSON.stringify(analysisResults, null, 2));\n\n// Format data đầy đủ để gửi qua webhook (bao gồm tất cả trường từ PostgreSQL)\nconst fullData = {\n  success: true,\n  processingId: processingId,\n  processing_id: processingId, // Alias để tương thích\n  message: 'Document analysis completed',\n  file_name: postgresData.file_name || '',\n  file_url: fileUrl,\n  cloudinary_url: postgresData.cloudinary_url || fileUrl,\n  user_id: postgresData.user_id || '',\n  department: postgresData.department || '',\n  status: postgresData.status || 'completed',\n  analysis_results: analysisResults, // Đã được flatten\n  docx_url: postgresData.docx_url || '',\n  created_at: postgresData.created_at || '',\n  updated_at: postgresData.updated_at || '',\n  analysis_completed_at: postgresData.analysis_completed_at || ''\n};\n\nconsole.log('📤 Full data prepared for Flow 2 & Flow 3:', JSON.stringify(fullData, null, 2));\n\n// Return đầy đủ dữ liệu\nreturn [{\n  json: fullData\n}];"
       },
-      "type": "n8n-nodes-base.googleDrive",
-      "typeVersion": 3,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
-        1536,
-        816
+        -288,
+        1072
       ],
-      "id": "f03ca422-7bda-4584-a527-f75e592ba1aa",
-      "name": "Google Drive1",
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "atJ86VdDoYyS4tiT",
-          "name": "Google Drive account 2"
-        }
-      }
+      "id": "1f09c7b2-01f4-452a-b498-0a3022d8270c",
+      "name": "Get Data from Postgres"
     },
     {
       "parameters": {
@@ -155,23 +55,23 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        848,
-        -48
+        -976,
+        208
       ],
-      "id": "31eb2b81-8d71-4df1-9021-3c5e7676bf6f",
+      "id": "d677a5af-ef6d-4925-8e5c-353a87c5ada4",
       "name": "Wait Before AI"
     },
     {
       "parameters": {
-        "jsCode": "// Parse kết quả từ comprehensive_analysis node\nconst aiResult = $json.output || $json;\n\nconsole.log('Raw AI Result:', JSON.stringify(aiResult, null, 2));\n\n// Parse và format giống như 6 node cũ để tương thích với Merge node\nlet parsed = {};\n\ntry {\n  // Nếu AI trả về string, parse JSON\n  let parsedData = aiResult;\n  if (typeof aiResult === 'string') {\n    // Loại bỏ markdown code blocks nếu có\n    const cleanJson = aiResult\n      .replace(/```json/gi, '')\n      .replace(/```/g, '')\n      .trim();\n    \n    // Tìm JSON trong string\n    const jsonMatch = cleanJson.match(/\\{[\\s\\S]*\\}/);\n    if (jsonMatch) {\n      parsedData = JSON.parse(jsonMatch[0]);\n    } else {\n      parsedData = JSON.parse(cleanJson);\n    }\n  }\n  \n  // Format để tương thích với Merge node\n  parsed = {\n    // main_theme format\n    main_theme: {\n      output: {\n        main_theme: parsedData.main_theme || \"\"\n      }\n    },\n    \n    // document_summary format\n    document_summary: {\n      output: {\n        document_summary: Array.isArray(parsedData.document_summary) \n          ? parsedData.document_summary \n          : []\n      }\n    },\n    \n    // key_takeaways format\n    key_takeaways: {\n      output: {\n        key_takeaways: Array.isArray(parsedData.key_takeaways) \n          ? parsedData.key_takeaways \n          : []\n      }\n    },\n    \n    // gaps_and_limitations format\n    gaps_and_limitations: {\n      output: {\n        gaps_and_limitations: Array.isArray(parsedData.gaps_and_limitations) \n          ? parsedData.gaps_and_limitations \n          : []\n      }\n    },\n    \n    // follow_up_questions format\n    follow_up_questions: {\n      output: {\n        follow_up_questions: Array.isArray(parsedData.follow_up_questions) \n          ? parsedData.follow_up_questions \n          : []\n      }\n    },\n    \n    // terminology_to_clarify format\n    terminology_to_clarify: {\n      output: {\n        terminology_to_clarify: Array.isArray(parsedData.terminology_to_clarify) \n          ? parsedData.terminology_to_clarify \n          : []\n      }\n    }\n  };\n  \n  console.log('Parsed Result:', JSON.stringify(parsed, null, 2));\n  \n} catch (error) {\n  console.error('Error parsing AI result:', error);\n  console.error('Raw data:', aiResult);\n  \n  // Fallback với empty data\n  parsed = {\n    main_theme: { output: { main_theme: \"Error parsing AI result\" } },\n    document_summary: { output: { document_summary: [] } },\n    key_takeaways: { output: { key_takeaways: [] } },\n    gaps_and_limitations: { output: { gaps_and_limitations: [] } },\n    follow_up_questions: { output: { follow_up_questions: [] } },\n    terminology_to_clarify: { output: { terminology_to_clarify: [] } }\n  };\n}\n\n// Return format tương thích với Merge node\nreturn [{\n  json: {\n    name: $('Set File Data').item.json.name,\n    main_theme: parsed.main_theme,\n    document_summary: parsed.document_summary,\n    key_takeaways: parsed.key_takeaways,\n    gaps_and_limitations: parsed.gaps_and_limitations,\n    follow_up_questions: parsed.follow_up_questions,\n    terminology_to_clarify: parsed.terminology_to_clarify\n  }\n}];"
+        "jsCode": "// Parse kết quả từ comprehensive_analysis node\nconst aiResult = $json.output || $json;\n\nconsole.log('Raw AI Result:', JSON.stringify(aiResult, null, 2));\n\n// Parse và format giống như 6 node cũ để tương thích với Merge node\nlet parsed = {};\n\ntry {\n  // Nếu AI trả về string, parse JSON\n  let parsedData = aiResult;\n  if (typeof aiResult === 'string') {\n    // Loại bỏ markdown code blocks nếu có\n    const cleanJson = aiResult\n      .replace(/```json/gi, '')\n      .replace(/```/g, '')\n      .trim();\n    \n    // Tìm JSON trong string\n    const jsonMatch = cleanJson.match(/\\{[\\s\\S]*\\}/);\n    if (jsonMatch) {\n      parsedData = JSON.parse(jsonMatch[0]);\n    } else {\n      parsedData = JSON.parse(cleanJson);\n    }\n  }\n  \n  // Format để tương thích với Merge node\n  parsed = {\n    // main_theme format\n    main_theme: {\n      output: {\n        main_theme: parsedData.main_theme || \"\"\n      }\n    },\n    \n    // document_summary format\n    document_summary: {\n      output: {\n        document_summary: Array.isArray(parsedData.document_summary) \n          ? parsedData.document_summary \n          : []\n      }\n    },\n    \n    // key_takeaways format\n    key_takeaways: {\n      output: {\n        key_takeaways: Array.isArray(parsedData.key_takeaways) \n          ? parsedData.key_takeaways \n          : []\n      }\n    },\n    \n    // gaps_and_limitations format\n    gaps_and_limitations: {\n      output: {\n        gaps_and_limitations: Array.isArray(parsedData.gaps_and_limitations) \n          ? parsedData.gaps_and_limitations \n          : []\n      }\n    },\n    \n    // follow_up_questions format\n    follow_up_questions: {\n      output: {\n        follow_up_questions: Array.isArray(parsedData.follow_up_questions) \n          ? parsedData.follow_up_questions \n          : []\n      }\n    },\n    \n    // terminology_to_clarify format\n    terminology_to_clarify: {\n      output: {\n        terminology_to_clarify: Array.isArray(parsedData.terminology_to_clarify) \n          ? parsedData.terminology_to_clarify \n          : []\n      }\n    }\n  };\n  \n  console.log('Parsed Result:', JSON.stringify(parsed, null, 2));\n  \n} catch (error) {\n  console.error('Error parsing AI result:', error);\n  console.error('Raw data:', aiResult);\n  \n  // Fallback với empty data\n  parsed = {\n    main_theme: { output: { main_theme: \"Error parsing AI result\" } },\n    document_summary: { output: { document_summary: [] } },\n    key_takeaways: { output: { key_takeaways: [] } },\n    gaps_and_limitations: { output: { gaps_and_limitations: [] } },\n    follow_up_questions: { output: { follow_up_questions: [] } },\n    terminology_to_clarify: { output: { terminology_to_clarify: [] } }\n  };\n}\n\n// Lấy name từ Set File Data node (với kiểm tra an toàn)\nlet fileName = '';\ntry {\n  const setFileData = $('Set File Data')?.item?.json;\n  fileName = setFileData?.name || 'Unknown Document';\n} catch (error) {\n  console.log('Could not get name from Set File Data node:', error);\n  fileName = 'Unknown Document';\n}\n\n// Return format tương thích với Merge node\nreturn [{\n  json: {\n    name: fileName,\n    main_theme: parsed.main_theme,\n    document_summary: parsed.document_summary,\n    key_takeaways: parsed.key_takeaways,\n    gaps_and_limitations: parsed.gaps_and_limitations,\n    follow_up_questions: parsed.follow_up_questions,\n    terminology_to_clarify: parsed.terminology_to_clarify\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1392,
-        -64
+        -432,
+        192
       ],
-      "id": "ea594fef-49b6-42c4-bfe6-50873efdc028",
+      "id": "3cd4d211-1a6e-4131-b312-78dbbdb4f591",
       "name": "Parse Combined Result"
     },
     {
@@ -186,10 +86,10 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 2,
       "position": [
-        1056,
-        -32
+        -768,
+        224
       ],
-      "id": "ae7d3a51-193d-4d0c-987f-b4e22164dd1a",
+      "id": "65c45eb0-278e-4ecd-aaf9-ef7595532f0f",
       "name": "comprehensive_analysis",
       "settings": {
         "errorHandling": {
@@ -204,17 +104,23 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "=INSERT INTO documents (processing_id, file_name, file_url, user_id, department, status, analysis_results, cloudinary_url, docx_url, created_at, updated_at, analysis_completed_at) VALUES ('{{ $('Set File Data').item.json.processingId }}', '{{ $('Set File Data').item.json.name }}', '{{ $('Set File Data').item.json.file_url }}', '{{ $('Set File Data').item.json.userId }}', '{{ $('Set File Data').item.json.department }}', 'completed', '{{ JSON.stringify($json).replace(/'/g, \"''\") }}'::jsonb, '{{ $('Set File Data').item.json.cloudinary_url || $('Set File Data').item.json.file_url }}', '{{ $json.docx_url || '' }}', NOW(), NOW(), NOW()) ON CONFLICT (processing_id) DO UPDATE SET status = 'completed', analysis_results = EXCLUDED.analysis_results, cloudinary_url = EXCLUDED.cloudinary_url, docx_url = COALESCE(NULLIF(EXCLUDED.docx_url, ''), documents.docx_url), updated_at = NOW(), analysis_completed_at = NOW() RETURNING *;",
+        "query": "=INSERT INTO documents (processing_id, file_name, file_url, user_id, department, status, analysis_results, cloudinary_url, created_at, updated_at, analysis_completed_at) VALUES ('{{ $json.processingId }}', '{{ $json.file_name }}', '{{ $json.file_url }}', '{{ $json.user_id }}', '{{ $json.department }}', '{{ $json.status }}', '{{ JSON.stringify($json.analysis_results).replace(/'/g, \"''\") }}'::jsonb, '{{ $json.cloudinary_url }}', NOW(), NOW(), NOW()) ON CONFLICT (processing_id) DO UPDATE SET status = EXCLUDED.status, analysis_results = EXCLUDED.analysis_results, cloudinary_url = EXCLUDED.cloudinary_url, updated_at = NOW(), analysis_completed_at = NOW() RETURNING *;",
         "options": {}
       },
-      "id": "baa0477a-26b7-40ce-a9db-4f54746cdedb",
+      "id": "5804a6eb-6fa4-46f2-9f1c-769d6a8678f0",
       "name": "Save Analysis to Postgres",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
       "position": [
-        1312,
-        816
-      ]
+        -512,
+        1072
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "lYVcMJl3c3m62cYc",
+          "name": "Postgres account"
+        }
+      }
     },
     {
       "parameters": {
@@ -224,11 +130,24 @@
       "type": "n8n-nodes-base.aggregate",
       "typeVersion": 1,
       "position": [
-        1072,
-        432
+        -752,
+        688
       ],
-      "id": "bee71b43-4e5c-43b4-884a-17114ca74652",
+      "id": "8295c48f-ddbe-4b56-a4be-e84ef22146ae",
       "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format dữ liệu từ Aggregate và Set File Data để lưu vào Postgres\n// Lấy dữ liệu phân tích từ Aggregate node\nconst aggregateData = $json || {};\n\n// Lấy thông tin file từ Set File Data node\nconst setFileData = $('Set File Data')?.item?.json || {};\n\n// Lấy PDF URL từ Cloudinary (file_url hoặc cloudinary_url)\nconst pdfUrl = setFileData.cloudinary_url || setFileData.file_url || '';\n\n// Lấy các thông tin cần thiết\nconst processingId = setFileData.processingId || '';\nconst fileName = setFileData.name || 'Unknown Document';\nconst userId = setFileData.userId || '';\nconst department = setFileData.department || '';\n\n// Format analysis results từ Aggregate\n// Aggregate có thể có cấu trúc khác nhau, cần xử lý linh hoạt\nlet analysisResults = {};\n\n// Thử lấy từ nhiều cấu trúc khác nhau\nif (aggregateData.main_theme) {\n  analysisResults = {\n    main_theme: aggregateData.main_theme?.output?.main_theme || aggregateData.main_theme || '',\n    document_summary: aggregateData.document_summary?.output?.document_summary || aggregateData.document_summary || [],\n    key_takeaways: aggregateData.key_takeaways?.output?.key_takeaways || aggregateData.key_takeaways || [],\n    gaps_and_limitations: aggregateData.gaps_and_limitations?.output?.gaps_and_limitations || aggregateData.gaps_and_limitations || [],\n    follow_up_questions: aggregateData.follow_up_questions?.output?.follow_up_questions || aggregateData.follow_up_questions || [],\n    terminology_to_clarify: aggregateData.terminology_to_clarify?.output?.terminology_to_clarify || aggregateData.terminology_to_clarify || []\n  };\n} else {\n  // Nếu không có cấu trúc nested, dùng trực tiếp\n  analysisResults = aggregateData;\n}\n\nconsole.log('📊 Formatting data for Postgres:');\nconsole.log('   Processing ID:', processingId);\nconsole.log('   File Name:', fileName);\nconsole.log('   PDF URL:', pdfUrl);\nconsole.log('   Analysis Results:', JSON.stringify(analysisResults, null, 2));\n\n// Return dữ liệu đã format\nreturn [{\n  json: {\n    processingId: processingId,\n    file_name: fileName,\n    file_url: pdfUrl,\n    cloudinary_url: pdfUrl, // PDF URL từ Cloudinary\n    user_id: userId,\n    department: department,\n    analysis_results: analysisResults,\n    status: 'completed'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -512,
+        688
+      ],
+      "id": "format-data-for-postgres",
+      "name": "Format Data for Postgres"
     },
     {
       "parameters": {
@@ -237,10 +156,10 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.1,
       "position": [
-        816,
-        352
+        -1008,
+        608
       ],
-      "id": "e19204fd-b293-492d-b7c4-0ea85e16d557",
+      "id": "5b6811f5-6e3a-400b-ac1a-d55f048bb904",
       "name": "Merge"
     },
     {
@@ -250,97 +169,11 @@
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.2,
       "position": [
-        1216,
-        -176
+        -608,
+        80
       ],
-      "id": "7857814f-657f-44da-875f-712370038580",
+      "id": "e57793a1-fbb2-4bf5-b506-54324068d590",
       "name": "Structured Output Parser - Comprehensive"
-    },
-    {
-      "parameters": {
-        "operation": "update",
-        "documentURL": "={{ $('Google Docs').item.json.id }}",
-        "actionsUi": {
-          "actionFields": [
-            {
-              "action": "insert",
-              "text": "={{ $json.name }}\n\n\n{{ $json.main_theme.output.main_theme }}\n\n{{ $json.document_summary.output.document_summary.map(section => `📌 ${section.section_title}:\\n${section.content}`).join('\\n\\n') }}\n\n\n---\n\n\nKey Takeaways\n\n{{ \n  $json.key_takeaways.output.key_takeaways\n    .map(takeaway => `- ${takeaway.point}:\\n${takeaway.context}`)\n    .join('\\n\\n') \n}}\n\n\n---\n\n\nGaps & Limitations\n\n{{ \n  $json.gaps_and_limitations.output.gaps_and_limitations\n    .map(gap => `- ${gap.issue}:\\n${gap.reason}`)\n    .join('\\n\\n') \n}}\n\n\n\n---\n\n\nFollow-Up Questions\n\n{{ \n  $json.follow_up_questions.output.follow_up_questions\n    .map(question => `?? ${question}`)\n    .join('\\n\\n') \n}}\n\n\n---\n\n\nTerminology To Clarify\n\n{{ \n  $json.terminology_to_clarify.output.terminology_to_clarify\n    .map(entry => `- ${entry.term}:\\n${entry.explanation}`)\n    .join('\\n\\n') \n}}"
-            }
-          ]
-        }
-      },
-      "type": "n8n-nodes-base.googleDocs",
-      "typeVersion": 2,
-      "position": [
-        1744,
-        432
-      ],
-      "id": "4f33ed48-8ae3-458c-b8d3-ae8170d8f48d",
-      "name": "Google Docs1",
-      "credentials": {
-        "googleDocsOAuth2Api": {
-          "id": "1amL3txBes4rtT8G",
-          "name": "Google Docs account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "operation": "move",
-        "fileId": {
-          "__rl": true,
-          "value": "={{ $json.id }}",
-          "mode": "id"
-        },
-        "driveId": {
-          "__rl": true,
-          "value": "My Drive",
-          "mode": "list",
-          "cachedResultName": "My Drive",
-          "cachedResultUrl": "https://drive.google.com/drive/my-drive"
-        },
-        "folderId": {
-          "__rl": true,
-          "value": "19dKOR2bA5dHGHCtfZ416c5qVou0lcDwF",
-          "mode": "list",
-          "cachedResultName": "Extract PDF",
-          "cachedResultUrl": "https://drive.google.com/drive/folders/19dKOR2bA5dHGHCtfZ416c5qVou0lcDwF"
-        }
-      },
-      "type": "n8n-nodes-base.googleDrive",
-      "typeVersion": 3,
-      "position": [
-        1520,
-        432
-      ],
-      "id": "45288500-fc66-4bfd-bea2-2bf2bd055ada",
-      "name": "Google Drive",
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "atJ86VdDoYyS4tiT",
-          "name": "Google Drive account 2"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "folderId": "14faxpPz6EOGRI14HAEgSI85EWpBZrFkX",
-        "title": "={{ $('Set File Data').item.json.name.replace(/\\.pdf$/i, '') }} PDF Summary"
-      },
-      "type": "n8n-nodes-base.googleDocs",
-      "typeVersion": 2,
-      "position": [
-        1312,
-        432
-      ],
-      "id": "615b3661-360a-45e8-9659-da4faf9040f6",
-      "name": "Google Docs",
-      "credentials": {
-        "googleDocsOAuth2Api": {
-          "id": "1amL3txBes4rtT8G",
-          "name": "Google Docs account"
-        }
-      }
     },
     {
       "parameters": {
@@ -349,10 +182,10 @@
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        160,
-        16
+        -1664,
+        272
       ],
-      "id": "6ac0c6fe-9a81-4273-a7ca-0e296fe9eda1",
+      "id": "775f4109-9933-4101-a0eb-ca11488d2260",
       "name": "2nd Loop Over Items"
     },
     {
@@ -362,10 +195,10 @@
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        -192,
-        32
+        -2016,
+        288
       ],
-      "id": "87f9de83-1669-40ae-91c2-593e31ad2fe5",
+      "id": "f89eac80-2c18-477f-a887-5a5fbcf1e708",
       "name": "Loop Over Items"
     },
     {
@@ -379,13 +212,13 @@
           }
         }
       },
-      "id": "f099e3a2-23e6-4b02-a998-cb5484bfe3ed",
+      "id": "d96005fa-f6cd-4d3e-b696-e8439099ba79",
       "name": "Download File From URL",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        384,
-        32
+        -1440,
+        288
       ]
     },
     {
@@ -438,13 +271,13 @@
         },
         "options": {}
       },
-      "id": "5130d861-8545-46d0-974a-98ad30f2b125",
+      "id": "46ce0a72-af2f-4749-a8f3-9171e51f990e",
       "name": "Set File Data",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -64,
-        176
+        -1888,
+        432
       ]
     },
     {
@@ -452,13 +285,13 @@
         "operation": "pdf",
         "options": {}
       },
-      "id": "4fec1378-51a6-43ae-b9e0-3a2c7807b228",
+      "id": "9cb42a31-f7aa-4fbc-847b-aa1867f21347",
       "name": "Extract PDF Text",
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1,
       "position": [
-        608,
-        32
+        -1216,
+        288
       ]
     },
     {
@@ -468,10 +301,10 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        1056,
-        -176
+        -768,
+        80
       ],
-      "id": "5bf09a66-18ad-41f2-9b7e-fb6c845981bc",
+      "id": "ac144b52-5df7-4811-92d0-1fcd7da46ff5",
       "name": "Google Gemini Chat Model",
       "credentials": {
         "googlePalmApi": {
@@ -483,106 +316,7 @@
   ],
   "pinData": {},
   "connections": {
-    "terminology_to_clarify": {
-      "main": [
-        [
-          {
-            "node": "Merge",
-            "type": "main",
-            "index": 5
-          }
-        ]
-      ]
-    },
-    "follow_up_questions": {
-      "main": [
-        [
-          {
-            "node": "Merge",
-            "type": "main",
-            "index": 4
-          }
-        ]
-      ]
-    },
-    "gaps_and_limitations": {
-      "main": [
-        [
-          {
-            "node": "Merge",
-            "type": "main",
-            "index": 3
-          }
-        ]
-      ]
-    },
-    "key_takeaways": {
-      "main": [
-        [
-          {
-            "node": "Merge",
-            "type": "main",
-            "index": 2
-          }
-        ]
-      ]
-    },
-    "main_theme": {
-      "main": [
-        [
-          {
-            "node": "Merge",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "document_summary": {
-      "main": [
-        [
-          {
-            "node": "Merge",
-            "type": "main",
-            "index": 1
-          }
-        ]
-      ]
-    },
-    "Upload DOCX to Cloudinary": {
-      "main": [
-        [
-          {
-            "node": "Extract DOCX URL",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Export Google Docs to DOCX": {
-      "main": [
-        [
-          {
-            "node": "Upload DOCX to Cloudinary",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Extract DOCX URL": {
-      "main": [
-        [
-          {
-            "node": "Save Analysis to Postgres",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Google Drive1": {
+    "Get Data from Postgres": {
       "main": [
         [
           {
@@ -591,6 +325,11 @@
             "index": 0
           }
         ]
+      ]
+    },
+    "Respond to Webhook": {
+      "main": [
+        []
       ]
     },
     "Wait Before AI": {
@@ -630,7 +369,7 @@
       "main": [
         [
           {
-            "node": "Google Drive1",
+            "node": "Get Data from Postgres",
             "type": "main",
             "index": 0
           }
@@ -641,7 +380,18 @@
       "main": [
         [
           {
-            "node": "Google Docs",
+            "node": "Format Data for Postgres",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Data for Postgres": {
+      "main": [
+        [
+          {
+            "node": "Save Analysis to Postgres",
             "type": "main",
             "index": 0
           }
@@ -665,39 +415,6 @@
           {
             "node": "comprehensive_analysis",
             "type": "ai_outputParser",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Google Docs1": {
-      "main": [
-        [
-          {
-            "node": "Export Google Docs to DOCX",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Google Drive": {
-      "main": [
-        [
-          {
-            "node": "Google Docs1",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Google Docs": {
-      "main": [
-        [
-          {
-            "node": "Google Drive",
-            "type": "main",
             "index": 0
           }
         ]
@@ -793,7 +510,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "291a2298-37ca-4dea-ac54-618c28b016a0",
+  "versionId": "ac5a0848-78f9-4300-9731-eb1c969cf0e0",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "d29aff038a4897a8be0d9843c07ba06d6b485556105b19c20835a7b0bfd5b9b2"

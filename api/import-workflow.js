@@ -1,7 +1,8 @@
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+// Load .env from project root
+require('../load-env');
 
 const N8N_BASE_URL = 'https://n8n.aidocmanageagent.io.vn';
 const WORKFLOW_ID = process.env.N8N_WORKFLOW_ID_FLOW1 || '9ucTmgO083P7qCGQ';

@@ -16,16 +16,57 @@
     },
     {
       "parameters": {
-        "jsCode": "// Chuẩn hóa dữ liệu đầu vào cho kiểm tra GDPR\nconst input = $json ?? {};\nconst body = input.body ?? {};\n\n// 🔍 Thử lấy email của chủ sở hữu từ output Google Drive Trigger\nlet ownerEmail = null;\ntry {\n  ownerEmail =\n    input.owners?.[0]?.emailAddress ||\n    body.owners?.[0]?.emailAddress ||\n    input.lastModifyingUser?.emailAddress ||\n    null;\n} catch (e) {\n  ownerEmail = null;\n}\n\n// 🔗 Tạo URL file từ Google Drive thông tin\nlet fileUrl = null;\nlet fileId = null;\nlet fileName = null;\nlet fileSize = null;\nlet mimeType = null;\n\ntry {\n  // Lấy thông tin file từ Google Drive Trigger\n  fileId = input.id || body.id || null;\n  fileName = input.name || body.name || null;\n  fileSize = input.size || body.size || null;\n  mimeType = input.mimeType || body.mimeType || null;\n  \n  // Tạo URL Google Drive\n  if (fileId) {\n    fileUrl = `https://drive.google.com/file/d/${fileId}/view`;\n  }\n} catch (e) {\n  console.warn('⚠️ Lỗi khi xử lý thông tin Google Drive:', e.message);\n}\n\n// 🧱 Dữ liệu mẫu (fallback khi thiếu input)\nconst defaultData = {\n  documentTitle: fileName || 'Tài liệu mẫu - GDPR Check',\n  documentCategory: 'Nhân sự',\n  documentSummary: 'Tài liệu chứa dữ liệu cá nhân cần kiểm tra GDPR',\n  originalFileId: fileId || 'sample_file_gdpr',\n  fileSize: fileSize || '1.0MB',\n  uploadDate: new Date().toISOString(),\n  uploader: ownerEmail || 'privacy@company.com', // ✅ dùng email owner nếu có\n  hasPersonalInfo: true,\n  containsSpecialCategoryData: false,\n  dataSubjectRequest: null,\n  legalBasis: null\n};\n\n// 🧠 Gộp dữ liệu: Ưu tiên input → body → mặc định\nconst merged = {\n  documentTitle: input.documentTitle || body.documentTitle || defaultData.documentTitle,\n  documentCategory: input.documentCategory || body.documentCategory || defaultData.documentCategory,\n  documentSummary: input.documentSummary || body.documentSummary || defaultData.documentSummary,\n  originalFileId: input.originalFileId || body.originalFileId || defaultData.originalFileId,\n  fileSize: input.fileSize || body.fileSize || defaultData.fileSize,\n  uploadDate: input.uploadDate || body.uploadDate || defaultData.uploadDate,\n  uploader: input.uploader || body.uploader || defaultData.uploader, // 👈 dùng uploader động\n  hasPersonalInfo: input.hasPersonalInfo ?? body.hasPersonalInfo ?? defaultData.hasPersonalInfo,\n  containsSpecialCategoryData: input.containsSpecialCategoryData ?? body.containsSpecialCategoryData ?? defaultData.containsSpecialCategoryData,\n  dataSubjectRequest: input.dataSubjectRequest ?? body.dataSubjectRequest ?? defaultData.dataSubjectRequest,\n  legalBasis: input.legalBasis ?? body.legalBasis ?? defaultData.legalBasis\n};\n\n// 🧾 Thêm metadata hệ thống và thông tin file\nconst result = {\n  receivedAt: new Date().toISOString(),\n  workflowSource: 'gdpr-compliance',\n  processingTimestamp: new Date().toISOString(),\n  // 🔗 Thông tin file từ Google Drive\n  fileUrl: fileUrl,\n  fileId: fileId,\n  fileName: fileName,\n  mimeType: mimeType,\n  // 📊 Thông tin Google Drive gốc\n  googleDriveInfo: {\n    id: fileId,\n    name: fileName,\n    size: fileSize,\n    mimeType: mimeType,\n    url: fileUrl,\n    owners: input.owners || body.owners || null,\n    lastModifyingUser: input.lastModifyingUser || body.lastModifyingUser || null\n  },\n  ...merged\n};\n\n// 🧹 Dọn undefined/null\nfor (const key in result) {\n  if (result[key] === undefined) result[key] = null;\n  if (typeof result[key] === 'string') result[key] = result[key].trim();\n}\n\n// ✅ Trả ra JSON hoàn chỉnh\nreturn [{ json: result }];\n"
+        "httpMethod": "POST",
+        "path": "gdpr-compliance",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
       },
-      "name": "2️⃣ Chuẩn hóa dữ liệu đầu vào",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1760,
+        -96
+      ],
+      "id": "webhook-flow2-gdpr",
+      "name": "1️⃣ Webhook - Nhận processingId",
+      "webhookId": "gdpr-compliance-webhook-flow2"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.api_url || `https://api.aidocmanageagent.io.vn/api/document/get-from-postgres/${$json.processingId || $json.processing_id}` }}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxRetries": 3,
+            "retryDelay": 2000
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1560,
+        -96
+      ],
+      "id": "get-data-from-api-flow2",
+      "name": "2️⃣ Get Data from API"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract và format dữ liệu từ API response cho Flow 2 (GDPR)\nconst apiResponse = $json || {};\nconst documentData = apiResponse.data || {};\n\n// Validate dữ liệu\nif (!documentData.processing_id) {\n  console.error('❌ Invalid API response: missing processing_id');\n  throw new Error('Invalid API response: missing processing_id');\n}\n\n// Extract analysis results\nconst analysisResults = documentData.analysis_results || {};\n\n// Format dữ liệu cho Flow 2 (GDPR Compliance)\nconst formattedData = {\n  // Thông tin document\n  processingId: documentData.processing_id,\n  file_name: documentData.file_name || 'Unknown Document',\n  file_url: documentData.file_url || documentData.cloudinary_url || '',\n  cloudinary_url: documentData.cloudinary_url || documentData.file_url || '',\n  \n  // Thông tin user\n  user_id: documentData.user_id || '',\n  department: documentData.department || '',\n  uploader: documentData.user_id || 'unknown@example.com',\n  \n  // Analysis results từ Flow 1 (quan trọng cho GDPR)\n  analysis_results: analysisResults,\n  \n  // Metadata\n  status: documentData.status || 'completed',\n  created_at: documentData.created_at || '',\n  analysis_completed_at: documentData.analysis_completed_at || '',\n  \n  // Fields cho logic GDPR\n  documentTitle: documentData.file_name || 'Tài liệu cần kiểm tra GDPR',\n  documentCategory: documentData.department || 'Chung',\n  documentSummary: analysisResults.main_theme || 'Tài liệu chứa dữ liệu cá nhân',\n  hasPersonalInfo: true, // Có thể check từ analysis_results\n  containsSpecialCategoryData: false, // Có thể check từ analysis_results\n  uploadDate: documentData.created_at || new Date().toISOString(),\n  fileSize: 'Unknown',\n  workflowSource: 'flow1-api',\n  \n  // Thông tin file\n  fileUrl: documentData.file_url || documentData.cloudinary_url || '',\n  fileName: documentData.file_name || 'Unknown Document',\n  fileId: documentData.processing_id,\n  originalFileId: documentData.processing_id,\n  \n  // Metadata hệ thống\n  receivedAt: new Date().toISOString(),\n  processingTimestamp: new Date().toISOString(),\n  \n  // GDPR fields\n  dataSubjectRequest: null,\n  legalBasis: null\n};\n\nconsole.log('📊 Formatted data for Flow 2 (GDPR):', JSON.stringify(formattedData, null, 2));\n\nreturn [{ json: formattedData }];"
+      },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         -1360,
         -96
       ],
-      "id": "89959532-8edf-49f1-9f14-fbd6764a3dda"
+      "id": "89959532-8edf-49f1-9f14-fbd6764a3dda",
+      "name": "3️⃣ Format Data for GDPR"
     },
     {
       "parameters": {
@@ -410,7 +451,29 @@
   ],
   "pinData": {},
   "connections": {
-    "2️⃣ Chuẩn hóa dữ liệu đầu vào": {
+    "1️⃣ Webhook - Nhận processingId": {
+      "main": [
+        [
+          {
+            "node": "2️⃣ Get Data from API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2️⃣ Get Data from API": {
+      "main": [
+        [
+          {
+            "node": "3️⃣ Format Data for GDPR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3️⃣ Format Data for GDPR": {
       "main": [
         [
           {
@@ -579,17 +642,6 @@
         [
           {
             "node": "1️⃣2️⃣ Tạo Audit Trail GDPR",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Google Drive Trigger1": {
-      "main": [
-        [
-          {
-            "node": "2️⃣ Chuẩn hóa dữ liệu đầu vào",
             "type": "main",
             "index": 0
           }
