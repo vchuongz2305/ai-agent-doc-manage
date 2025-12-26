@@ -1,0 +1,611 @@
+{
+  "name": "Bui Cong Chuong - check GDPR",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "### LUỒNG 2: AI DOCUMENT MANAGEMENT AGENT – GDPR COMPLIANCE (Fixed Clean)\n\n**Mục đích:** Tự động kiểm tra tuân thủ GDPR cho tài liệu.\n\n**Tính năng chính:**\n• AI quyết định hành động GDPR (delete/anonymize/allow)\n• Xác định legal basis, DSR, retention\n• Tự động thông báo DPO khi cần\n• Ghi log và audit trail đầy đủ.\n\n**Cải tiến:**\n• Sửa lỗi phân nhánh If/Else chuẩn.\n• Thêm Merge node để hợp nhất các nhánh hành động."
+      },
+      "name": "📋 Mô tả Luồng GDPR",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1760,
+        -448
+      ],
+      "id": "44b8796f-bd9f-45bb-8029-a1ac5d0b892b"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 🧩 Chuẩn hóa dữ liệu đầu vào cho kiểm tra GDPR\nconst input = $json ?? {};\nconst body = input.body ?? {};\n\n// 🔍 Thử lấy email của chủ sở hữu từ output Google Drive Trigger\nlet ownerEmail = null;\ntry {\n  ownerEmail =\n    input.owners?.[0]?.emailAddress ||\n    body.owners?.[0]?.emailAddress ||\n    input.lastModifyingUser?.emailAddress ||\n    null;\n} catch (e) {\n  ownerEmail = null;\n}\n\n// 🔗 Tạo URL file từ Google Drive thông tin\nlet fileUrl = null;\nlet fileId = null;\nlet fileName = null;\nlet fileSize = null;\nlet mimeType = null;\n\ntry {\n  // Lấy thông tin file từ Google Drive Trigger\n  fileId = input.id || body.id || null;\n  fileName = input.name || body.name || null;\n  fileSize = input.size || body.size || null;\n  mimeType = input.mimeType || body.mimeType || null;\n  \n  // Tạo URL Google Drive\n  if (fileId) {\n    fileUrl = `https://drive.google.com/file/d/${fileId}/view`;\n  }\n} catch (e) {\n  console.warn('⚠️ Lỗi khi xử lý thông tin Google Drive:', e.message);\n}\n\n// 🧱 Dữ liệu mẫu (fallback khi thiếu input)\nconst defaultData = {\n  documentTitle: fileName || 'Tài liệu mẫu - GDPR Check',\n  documentCategory: 'Nhân sự',\n  documentSummary: 'Tài liệu chứa dữ liệu cá nhân cần kiểm tra GDPR',\n  originalFileId: fileId || 'sample_file_gdpr',\n  fileSize: fileSize || '1.0MB',\n  uploadDate: new Date().toISOString(),\n  uploader: ownerEmail || 'privacy@company.com', // ✅ dùng email owner nếu có\n  hasPersonalInfo: true,\n  containsSpecialCategoryData: false,\n  dataSubjectRequest: null,\n  legalBasis: null\n};\n\n// 🧠 Gộp dữ liệu: Ưu tiên input → body → mặc định\nconst merged = {\n  documentTitle: input.documentTitle || body.documentTitle || defaultData.documentTitle,\n  documentCategory: input.documentCategory || body.documentCategory || defaultData.documentCategory,\n  documentSummary: input.documentSummary || body.documentSummary || defaultData.documentSummary,\n  originalFileId: input.originalFileId || body.originalFileId || defaultData.originalFileId,\n  fileSize: input.fileSize || body.fileSize || defaultData.fileSize,\n  uploadDate: input.uploadDate || body.uploadDate || defaultData.uploadDate,\n  uploader: input.uploader || body.uploader || defaultData.uploader, // 👈 dùng uploader động\n  hasPersonalInfo: input.hasPersonalInfo ?? body.hasPersonalInfo ?? defaultData.hasPersonalInfo,\n  containsSpecialCategoryData: input.containsSpecialCategoryData ?? body.containsSpecialCategoryData ?? defaultData.containsSpecialCategoryData,\n  dataSubjectRequest: input.dataSubjectRequest ?? body.dataSubjectRequest ?? defaultData.dataSubjectRequest,\n  legalBasis: input.legalBasis ?? body.legalBasis ?? defaultData.legalBasis\n};\n\n// 🧾 Thêm metadata hệ thống và thông tin file\nconst result = {\n  receivedAt: new Date().toISOString(),\n  workflowSource: 'gdpr-compliance',\n  processingTimestamp: new Date().toISOString(),\n  // 🔗 Thông tin file từ Google Drive\n  fileUrl: fileUrl,\n  fileId: fileId,\n  fileName: fileName,\n  mimeType: mimeType,\n  // 📊 Thông tin Google Drive gốc\n  googleDriveInfo: {\n    id: fileId,\n    name: fileName,\n    size: fileSize,\n    mimeType: mimeType,\n    url: fileUrl,\n    owners: input.owners || body.owners || null,\n    lastModifyingUser: input.lastModifyingUser || body.lastModifyingUser || null\n  },\n  ...merged\n};\n\n// 🧹 Dọn undefined/null\nfor (const key in result) {\n  if (result[key] === undefined) result[key] = null;\n  if (typeof result[key] === 'string') result[key] = result[key].trim();\n}\n\n// ✅ Trả ra JSON hoàn chỉnh\nreturn [{ json: result }];\n"
+      },
+      "name": "2️⃣ Chuẩn hóa dữ liệu đầu vào",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1360,
+        -96
+      ],
+      "id": "89959532-8edf-49f1-9f14-fbd6764a3dda"
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "text": "=Phân tích GDPR. Quyết định: delete|anonymize|allow.\n\n{\n  \"content\": {\n    \"gdprDecision\": \"delete|anonymize|allow\",\n    \"notifyDPO\": true,\n    \"legalBasis\": \"consent|contract|null\",\n    \"retentionDays\": 30,\n    \"redactionFields\": [],\n    \"gdprJustification\": \"Lý do\",\n    \"fileUrl\": \"{{ $json.fileUrl }}\",\n    \"fileName\": \"{{ $json.fileName }}\",\n    \"personalDataFound\": [],\n    \"sensitiveDataDetected\": false,\n    \"dataVolume\": \"high|medium|low\"\n  },\n  \"finishReason\": \"stop\",\n  \"index\": 0,\n  \"uploader\": {{ $json.uploader }}\n}",
+        "options": {}
+      },
+      "name": "3️⃣ AI GDPR Decision",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        -1152,
+        -96
+      ],
+      "id": "3b5d4957-2fdb-4e3c-95a1-98864c580347",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "91898OzbZbpGF2b2",
+          "name": "Google Gemini(PaLM) Api account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 🧠 Parse kết quả AI GDPR (Node 4) - FIXED VERSION\nlet ai = {};\nlet raw = '';\nlet clean = '';\nlet match = null;\n\ntry {\n  // 🔍 Lấy text từ phản hồi của Gemini\n  raw = $json?.content?.parts?.[0]?.text || $json?.text || JSON.stringify($json);\n\n  // 🧹 Làm sạch ký hiệu code block\n  clean = raw.replace(/```json/gi, '').replace(/```/g, '').trim();\n\n  // 🔎 Tìm đoạn JSON trong text\n  match = clean.match(/\\{[\\s\\S]*\\}/);\n\n  // 🧾 Parse JSON\n  ai = JSON.parse(match ? match[0] : clean);\n  console.log(\"✅ Parsed AI JSON:\", ai);\n} catch (error) {\n  console.warn(\"⚠️ Parse error:\", error.message);\n  console.log(\"📝 Raw preview:\", raw?.slice(0, 300));\n\n  // 🛟 Fallback an toàn\n  ai = {\n    content: {\n      gdprDecision: \"anonymize\",\n      notifyDPO: true,\n      gdprJustification: \"⚠️ Parsing fallback due to invalid AI output\"\n    },\n    uploader: \"dangnguyen0175@gmail.com\"\n  };\n}\n\n// 🧩 Hợp nhất dữ liệu đầu vào + kết quả AI\nconst result = {\n  ...$input.first().json,\n  aiRawOutput: raw || null,\n\n  // 🧠 Lấy dữ liệu từ cấu trúc lồng nhau (ai.content.*)\n  gdprDecision: ai.content?.gdprDecision || ai.gdprDecision || ai.action || \"anonymize\",\n  notifyDPO: !!(ai.content?.notifyDPO ?? ai.notifyDPO),\n  gdprJustification: ai.content?.gdprJustification || ai.gdprJustification || ai.justification || \"N/A\",\n  legalBasis: ai.content?.legalBasis || ai.legalBasis || null,\n  dataSubjectRequest: ai.content?.dataSubjectRequest || ai.dataSubjectRequest || null,\n  retentionDays: ai.content?.retentionDays || ai.retentionDays || 30,\n  redactionFields: ai.content?.redactionFields || ai.redactionFields || [],\n  aiDecisionTimestamp: ai.aiDecisionTimestamp || new Date().toISOString(),\n  uploader: ai.uploader || $input.first().json.uploader || \"dangnguyen0175@gmail.com\",\n  // 🔗 Thông tin file từ AI (nếu có)\n  fileUrl: ai.content?.fileUrl || $input.first().json.fileUrl || null,\n  fileName: ai.content?.fileName || $input.first().json.fileName || null,\n  // 🔍 Thông tin phân tích nội dung file\n  personalDataFound: ai.content?.personalDataFound || ai.personalDataFound || [],\n  sensitiveDataDetected: ai.content?.sensitiveDataDetected ?? ai.sensitiveDataDetected ?? false,\n  dataVolume: ai.content?.dataVolume || ai.dataVolume || 'unknown',\n  // 🧾 Log thêm thông tin trạng thái parser\n  aiParseStatus: match ? \"success\" : \"fallback\",\n  aiParsed: ai\n};\n\n// 🧾 Log kết quả cuối cùng để kiểm tra\nconsole.log(\"📜 GDPR Parsed Result:\", result);\n\nreturn [{ json: result }];\n"
+      },
+      "name": "4️⃣ Parse quyết định GDPR",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        -96
+      ],
+      "id": "e349f3ff-5cdb-42c3-b7ea-3008883cf033"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{ $json.gdprDecision }}",
+              "rightValue": "delete",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "5️⃣ Hành động: Delete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -768,
+        -224
+      ],
+      "id": "16570a87-fbdb-4d81-962c-2451736c9e79"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{ $json.gdprDecision }}",
+              "rightValue": "anonymize",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "6️⃣ Hành động: Anonymize?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -768,
+        -64
+      ],
+      "id": "6946f8f6-9367-4c47-9273-486a57d54b73"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===============================================\n// 🧹 GDPR ACTION: DELETE / REVOKE DOCUMENT ACCESS\n// ===============================================\n\n// Lấy dữ liệu đầu vào\nconst data = $json;\nconst fileId = data.originalFileId || null;\n\n// Biến kết quả mặc định\nlet result = {\n  ...data,\n  gdprActionPerformed: 'delete',\n  status: 'GDPR_REVOKE_APPLIED',\n  deleteSuccess: false,\n  deleteMethod: null,\n  deleteTimestamp: new Date().toISOString(),\n  deleteLog: ''\n};\n\n// Nếu có ID file gốc thì tiến hành “xóa” (hoặc thu hồi chia sẻ)\ntry {\n  if (fileId) {\n    // --- Nếu bạn dùng Google Drive API ---\n    // Giả lập hành động gọi API n8n khác (ở môi trường thực, sẽ dùng node Google Drive Delete)\n    result.deleteMethod = 'revoke_access';\n    result.deleteSuccess = true;\n    result.deleteLog = `Tài liệu ${fileId} đã được thu hồi quyền truy cập.`;\n  } else {\n    result.deleteLog = 'Không tìm thấy originalFileId để xóa.';\n  }\n} catch (err) {\n  result.status = 'GDPR_DELETE_FAILED';\n  result.deleteSuccess = false;\n  result.deleteLog = `Lỗi khi xóa: ${err.message}`;\n}\n\n// Trả về kết quả xử lý\nreturn [{ json: result }];\n"
+      },
+      "name": "7️⃣ Thực thi Delete/Revoke",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -576,
+        -304
+      ],
+      "id": "28124028-d9fc-48bd-9b15-3e823153e526"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Giả lập ẩn danh/redact\nlet summary = $json.documentSummary || '';\nfor (const f of ($json.redactionFields || [])) summary = summary.replace(new RegExp(f, 'gi'), '[REDACTED]');\nreturn { json: { ...$json, documentSummary: summary, gdprActionPerformed: 'anonymize', status: 'GDPR_ANON_APPLIED' } };"
+      },
+      "name": "7️⃣ Thực thi Anonymize/Redact",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -576,
+        -64
+      ],
+      "id": "cc8da31e-6341-4aad-9983-0b582482166a"
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: { ...$json, gdprActionPerformed: 'allow', status: 'GDPR_ALLOWED' } };"
+      },
+      "name": "7️⃣.5️⃣ Đặt trạng thái Allow",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -576,
+        128
+      ],
+      "id": "d9cdd524-7505-4c82-8852-6fe138479bab"
+    },
+    {
+      "parameters": {},
+      "name": "7.8 Merge Actions",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        -288
+      ],
+      "id": "a9fdb4c3-b871-453d-950b-04c003ebafda"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{ $json.notifyDPO }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            },
+            {
+              "id": "f37a3bfe-bcfc-4d92-b65b-c672411cf81e",
+              "leftValue": "={{ $json.notifyDPO }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "name": "8️⃣ Cần thông báo DPO?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -208,
+        -96
+      ],
+      "id": "e4b64e9b-b6cd-43da-8d4d-2e57c374134f"
+    },
+    {
+      "parameters": {
+        "sendTo": "tranhaduy204@gmail.com",
+        "subject": "=🔐 GDPR Alert: {{ $json.gdprDecision?.toUpperCase() || 'UNKNOWN' }} file requires immediate attention",
+        "emailType": "text",
+        "message": "=Kính chào DPO,\n\nHệ thống AI GDPR Compliance Agent đã phát hiện một tài liệu vi phạm quy định GDPR và cần sự can thiệp ngay lập tức.\n\n**Thông tin tài liệu:**\n- Tên file: {{ $json.fileName || 'Không xác định' }}\n- URL file: {{ $json.fileUrl || 'Không có URL' }}\n- Uploader: {{ $json.uploader || 'Không xác định' }}\n- Quyết định xử lý: {{ $json.gdprDecision || 'Không xác định' }}\n- Thông báo DPO: {{ $json.notifyDPO || 'Không' }}\n- Cơ sở pháp lý: {{ $json.legalBasis || 'Không có' }}\n\n**🔍 Phân tích nội dung file:**\n- Dữ liệu cá nhân tìm thấy: {{ $json.personalDataFound && $json.personalDataFound.length > 0 ? $json.personalDataFound.join(', ') : 'Không có' }}\n- Dữ liệu nhạy cảm: {{ $json.sensitiveDataDetected ? 'Có' : 'Không' }}\n- Khối lượng dữ liệu: {{ $json.dataVolume || 'Không xác định' }}\n- Các trường cần redact: {{ $json.redactionFields && $json.redactionFields.length > 0 ? $json.redactionFields.join(', ') : 'Không có' }}\n\n**Lý do quyết định:**\n{{ $json.gdprJustification || 'Không có lý do cụ thể được cung cấp.' }}\n\n**Thời điểm ra quyết định:** {{ $json.aiDecisionTimestamp || (new Date()).toISOString() }}\n\n**Hành động khuyến nghị:**\n- Xem xét và xác nhận quyết định của AI\n- Liên hệ với uploader để làm rõ mục đích sử dụng dữ liệu\n- Thực hiện các biện pháp khắc phục cần thiết\n- Cập nhật chính sách bảo mật nếu cần\n\nTrân trọng,\n**AI GDPR Compliance Agent**",
+        "options": {}
+      },
+      "name": "9️⃣ Gửi email DPO",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        -192
+      ],
+      "id": "ee01bb5c-0a72-4e66-8acc-83b4f8916d1e",
+      "webhookId": "02bbf782-9357-4ea4-b78e-664aaad97422",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "LTZtTwz14XXGyrdz",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.uploader || 'dangnguyen0175@gmail.com' }}",
+        "subject": "=📣 GDPR Result: {{ $json.gdprDecision?.toUpperCase() || 'UNKNOWN' }}",
+        "emailType": "text",
+        "message": "=Kính chào bạn,\n\nHệ thống AI GDPR Compliance Agent đã hoàn tất việc kiểm tra tuân thủ GDPR cho tài liệu của bạn.\n\n**Thông tin tài liệu:**\n- Tên file: {{ $json.fileName || 'Không xác định' }}\n- URL file: {{ $json.fileUrl || 'Không có URL' }}\n\n**🔍 Kết quả phân tích nội dung:**\n- Dữ liệu cá nhân tìm thấy: {{ $json.personalDataFound && $json.personalDataFound.length > 0 ? $json.personalDataFound.join(', ') : 'Không có' }}\n- Dữ liệu nhạy cảm: {{ $json.sensitiveDataDetected ? 'Có' : 'Không' }}\n- Khối lượng dữ liệu: {{ $json.dataVolume || 'Không xác định' }}\n\n**Kết quả quyết định:**\n- Quyết định xử lý: {{ $json.gdprDecision || 'Không xác định' }}\n- Thông báo DPO: {{ $json.notifyDPO || 'Không' }}\n- Cơ sở pháp lý: {{ $json.legalBasis || 'Không có' }}\n- Các trường cần redact: {{ $json.redactionFields && $json.redactionFields.length > 0 ? $json.redactionFields.join(', ') : 'Không có' }}\n\n**Lý do quyết định:**\n{{ $json.gdprJustification || 'Không có lý do được cung cấp.' }}\n\n**Thời điểm ra quyết định:** {{ $json.aiDecisionTimestamp || (new Date()).toISOString() }}\n\nNếu bạn có bất kỳ thắc mắc nào về kết quả này, vui lòng liên hệ với bộ phận bảo mật dữ liệu (DPO) để được hỗ trợ.\n\nTrân trọng,\n**AI GDPR Compliance Agent**",
+        "options": {}
+      },
+      "name": "1️⃣0️⃣ Thông báo kết quả cho uploader",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [
+        176,
+        -96
+      ],
+      "id": "b24105fd-5a3e-4876-8840-a008514fb57c",
+      "webhookId": "62b2fab2-9f29-4f76-9c77-89e5acbbdf61",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "LTZtTwz14XXGyrdz",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "16eU4No0bLeMYCxjo0586358kzjuBrrf52fRo_n7SDFg",
+          "mode": "list",
+          "cachedResultName": "Log GDPR",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/16eU4No0bLeMYCxjo0586358kzjuBrrf52fRo_n7SDFg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Trang tính1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/16eU4No0bLeMYCxjo0586358kzjuBrrf52fRo_n7SDFg/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "threadId",
+              "displayName": "threadId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "labelIds",
+              "displayName": "labelIds",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "name": "1️⃣1️⃣ Ghi log GDPR vào Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        368,
+        -96
+      ],
+      "id": "3163359c-2a13-4298-9ed5-f35350b121d6",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "cmWSNW94QNgr3T8o",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Audit Trail GDPR\nreturn { json: { auditId: `gdpr_${Date.now()}`, timestamp: new Date().toISOString(), ...$json } };"
+      },
+      "name": "1️⃣2️⃣ Tạo Audit Trail GDPR",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        -96
+      ],
+      "id": "aac785df-4161-45aa-a842-0a3facdbedd9"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 🔍 DEBUG: Kiểm tra dữ liệu trước khi gửi email\nconsole.log('🔍 DEBUG - Dữ liệu trước email:');\nconsole.log('gdprDecision:', $json.gdprDecision);\nconsole.log('notifyDPO:', $json.notifyDPO);\nconsole.log('uploader:', $json.uploader);\nconsole.log('Full data:', JSON.stringify($json, null, 2));\n\n// 🧹 Đảm bảo có dữ liệu cần thiết\nconst result = {\n  ...$json,\n  // Đảm bảo có gdprDecision\n  gdprDecision: $json.gdprDecision || 'UNKNOWN',\n  // Đảm bảo có notifyDPO\n  notifyDPO: $json.notifyDPO || false,\n  // Đảm bảo có uploader\n  uploader: $json.uploader || 'dangnguyen0175@gmail.com',\n  // Đảm bảo có justification\n  gdprJustification: $json.gdprJustification || 'Không có lý do được cung cấp.',\n  // Thêm timestamp\n  aiDecisionTimestamp: $json.aiDecisionTimestamp || new Date().toISOString()\n};\n\nconsole.log('✅ DEBUG - Dữ liệu sau xử lý:', result);\nreturn [{ json: result }];"
+      },
+      "name": "🔍 DEBUG: Kiểm tra dữ liệu",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        32,
+        112
+      ],
+      "id": "030633ec-0900-4e7e-b5a4-66c6dc76dc82"
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "value": "19dKOR2bA5dHGHCtfZ416c5qVou0lcDwF",
+          "mode": "list",
+          "cachedResultName": "Extract PDF",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/19dKOR2bA5dHGHCtfZ416c5qVou0lcDwF"
+        },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1584,
+        -48
+      ],
+      "id": "152d20a2-fe8b-4759-8d55-d0ca0b232ffb",
+      "name": "Google Drive Trigger1",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "atJ86VdDoYyS4tiT",
+          "name": "Google Drive account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "2️⃣ Chuẩn hóa dữ liệu đầu vào": {
+      "main": [
+        [
+          {
+            "node": "3️⃣ AI GDPR Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3️⃣ AI GDPR Decision": {
+      "main": [
+        [
+          {
+            "node": "4️⃣ Parse quyết định GDPR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4️⃣ Parse quyết định GDPR": {
+      "main": [
+        [
+          {
+            "node": "5️⃣ Hành động: Delete?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5️⃣ Hành động: Delete?": {
+      "main": [
+        [
+          {
+            "node": "7️⃣ Thực thi Delete/Revoke",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "6️⃣ Hành động: Anonymize?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6️⃣ Hành động: Anonymize?": {
+      "main": [
+        [
+          {
+            "node": "7️⃣ Thực thi Anonymize/Redact",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "7️⃣.5️⃣ Đặt trạng thái Allow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7️⃣ Thực thi Delete/Revoke": {
+      "main": [
+        [
+          {
+            "node": "7.8 Merge Actions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7️⃣ Thực thi Anonymize/Redact": {
+      "main": [
+        [
+          {
+            "node": "7.8 Merge Actions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7️⃣.5️⃣ Đặt trạng thái Allow": {
+      "main": [
+        [
+          {
+            "node": "7.8 Merge Actions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7.8 Merge Actions": {
+      "main": [
+        [
+          {
+            "node": "8️⃣ Cần thông báo DPO?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8️⃣ Cần thông báo DPO?": {
+      "main": [
+        [
+          {
+            "node": "9️⃣ Gửi email DPO",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "🔍 DEBUG: Kiểm tra dữ liệu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9️⃣ Gửi email DPO": {
+      "main": [
+        [
+          {
+            "node": "🔍 DEBUG: Kiểm tra dữ liệu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔍 DEBUG: Kiểm tra dữ liệu": {
+      "main": [
+        [
+          {
+            "node": "1️⃣0️⃣ Thông báo kết quả cho uploader",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1️⃣0️⃣ Thông báo kết quả cho uploader": {
+      "main": [
+        [
+          {
+            "node": "1️⃣1️⃣ Ghi log GDPR vào Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1️⃣1️⃣ Ghi log GDPR vào Sheets": {
+      "main": [
+        [
+          {
+            "node": "1️⃣2️⃣ Tạo Audit Trail GDPR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive Trigger1": {
+      "main": [
+        [
+          {
+            "node": "2️⃣ Chuẩn hóa dữ liệu đầu vào",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "6b553c41-3c17-4fd3-ab90-ca625fadd1ce",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d29aff038a4897a8be0d9843c07ba06d6b485556105b19c20835a7b0bfd5b9b2"
+  },
+  "id": "NovgqYS6R0udt74I",
+  "tags": []
+}
