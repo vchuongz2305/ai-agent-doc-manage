@@ -231,7 +231,6 @@ const RESULT_WEBHOOKS = {
 const processingStatus = new Map();
 
 // PostgreSQL Connection Pool
-<<<<<<< HEAD
 // Support both DATABASE_URL (Render format) and individual env vars
 let pgConfig = {};
 
@@ -245,7 +244,9 @@ if (process.env.DATABASE_URL) {
       : false,
     max: 20,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
+    connectionTimeoutMillis: 10000, // Tăng từ 2s lên 10s
+    statement_timeout: 30000, // 30 seconds for query timeout
+    query_timeout: 30000,
   };
 } else {
   // Use individual environment variables
@@ -258,7 +259,9 @@ if (process.env.DATABASE_URL) {
     password: process.env.POSTGRES_PASSWORD || '',
     max: 20,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
+    connectionTimeoutMillis: 10000, // Tăng từ 2s lên 10s
+    statement_timeout: 30000, // 30 seconds for query timeout
+    query_timeout: 30000,
   };
   
   // Log config (without password)
@@ -269,20 +272,6 @@ if (process.env.DATABASE_URL) {
 }
 
 const pgPool = new Pool(pgConfig);
-=======
-const pgPool = new Pool({
-  host: process.env.POSTGRES_HOST || 'localhost',
-  port: process.env.POSTGRES_PORT || 5432,
-  database: process.env.POSTGRES_DATABASE || 'document_management',
-  user: process.env.POSTGRES_USER || 'doc_user',
-  password: process.env.POSTGRES_PASSWORD || '',
-  max: 20, // Maximum number of clients in the pool
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000, // Tăng từ 2s lên 10s
-  statement_timeout: 30000, // 30 seconds for query timeout
-  query_timeout: 30000,
-});
->>>>>>> origin/temp
 
 // Track PostgreSQL connection status with circuit breaker pattern
 let pgConnectionStatus = {
@@ -526,10 +515,23 @@ app.post('/api/document/process', upload.single('file'), async (req, res) => {
     // Generate unique processing ID
     const processingId = `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
+    // Fix file name encoding (ensure UTF-8)
+    let fileName = file.originalname;
+    try {
+      // Try to decode if it's already encoded incorrectly
+      if (Buffer.from(fileName, 'latin1').toString('utf8') !== fileName) {
+        fileName = Buffer.from(fileName, 'latin1').toString('utf8');
+        console.log(`🔧 Fixed file name encoding: ${file.originalname} → ${fileName}`);
+      }
+    } catch (e) {
+      // If decoding fails, use original name
+      console.warn(`⚠️ Could not fix file name encoding: ${e.message}`);
+    }
+    
     // Initialize processing status
     processingStatus.set(processingId, {
       id: processingId,
-      fileName: file.originalname,
+      fileName: fileName,
       fileSize: file.size,
       mimeType: file.mimetype,
       userId: userId,
