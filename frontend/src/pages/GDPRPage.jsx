@@ -15,6 +15,11 @@ function GDPRPage() {
   const [allFiles, setAllFiles] = useState([]);
   const [loadingFiles, setLoadingFiles] = useState(true);
   const [filesError, setFilesError] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalFiles, setTotalFiles] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const itemsPerPage = 12;
 
   // Processing steps animation
   const processingSteps = [
@@ -47,17 +52,21 @@ function GDPRPage() {
 
   // Load all analyzed files on component mount
   useEffect(() => {
-    loadAllFiles();
+    loadAllFiles(1);
   }, []);
 
-  // Load all files with analysis and GDPR data from database
-  const loadAllFiles = async () => {
+  // Load all files with analysis and GDPR data from database with pagination
+  const loadAllFiles = async (page = 1) => {
     try {
       setLoadingFiles(true);
       setFilesError(null);
       
-      console.log('🔄 Đang fetch dữ liệu từ /gdpr endpoint...');
-      const apiUrl = '/gdpr?limit=1000&has_analysis=true';
+      const offset = (page - 1) * itemsPerPage;
+      console.log('🔄 Đang fetch dữ liệu từ /gdpr endpoint...', { page, offset, limit: itemsPerPage, search: searchQuery });
+      let apiUrl = `/gdpr?limit=${itemsPerPage}&offset=${offset}&has_analysis=true`;
+      if (searchQuery && searchQuery.trim()) {
+        apiUrl += `&search=${encodeURIComponent(searchQuery.trim())}`;
+      }
       console.log('📡 API URL:', apiUrl);
       
       const response = await fetch(apiUrl, {
@@ -84,8 +93,14 @@ function GDPRPage() {
       
       if (data.success) {
         const files = data.data || [];
-        console.log(`✅ Loaded ${files.length} files from database`);
+        const total = data.pagination?.total || files.length;
+        const pages = Math.ceil(total / itemsPerPage);
+        
+        console.log(`✅ Loaded ${files.length} files from database (page ${page}/${pages})`);
         setAllFiles(files);
+        setTotalFiles(total);
+        setTotalPages(pages);
+        setCurrentPage(page);
       } else {
         throw new Error(data.error || 'Failed to load files');
       }
@@ -571,84 +586,8 @@ function GDPRPage() {
       </div>
 
       <div style={{ marginBottom: '32px' }}>
-        {/* Upload File Section */}
-        <div className="modern-card" style={{ marginBottom: '24px' }}>
-          <div className="card-header">
-            <div>
-              <div className="card-title">Upload Tài Liệu Mới</div>
-              <div className="card-subtitle">Upload file để phân tích và kiểm tra GDPR</div>
-            </div>
-          </div>
-          <form onSubmit={handleUploadAndAnalyze}>
-            <div 
-              className={`upload-card ${uploadedFile ? 'has-file' : ''}`}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              onClick={() => document.getElementById('fileUploadInput').click()}
-              style={{ marginBottom: '16px' }}
-            >
-              <span className="upload-icon-large">📄</span>
-              <div className="upload-text-large">
-                {uploadedFile ? `Đã chọn: ${uploadedFile.name}` : 'Click để upload hoặc kéo thả file'}
-              </div>
-              {uploadedFile && (
-                <div className="upload-hint-text">
-                  {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
-                </div>
-              )}
-              {!uploadedFile && (
-                <div className="upload-hint-text">Hỗ trợ: PDF, Word, Excel, PowerPoint, Images</div>
-              )}
-              <input 
-                type="file" 
-                id="fileUploadInput" 
-                onChange={handleFileChange}
-                accept=".pdf,.docx,.xlsx,.pptx,.txt,.jpg,.jpeg,.png,.gif"
-                style={{ display: 'none' }}
-              />
-            </div>
-
-            <button 
-              type="submit" 
-              className="btn-modern btn-primary"
-              disabled={!uploadedFile || isUploading || loading}
-              style={{ width: '100%' }}
-            >
-              {isUploading ? (
-                <>
-                  <span className="gdpr-btn-spinner" style={{ marginRight: '8px' }}></span>
-                  Đang upload và phân tích...
-                </>
-              ) : (
-                <>
-                  <span>📤</span>
-                  Upload và Kiểm Tra GDPR
-                </>
-              )}
-            </button>
-          </form>
-        </div>
-
-        {/* Divider */}
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          margin: '24px 0',
-          gap: '16px'
-        }}>
-          <div style={{ flex: 1, height: '1px', background: 'var(--gray-300)' }}></div>
-          <span style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>HOẶC</span>
-          <div style={{ flex: 1, height: '1px', background: 'var(--gray-300)' }}></div>
-        </div>
-
         {/* File Selection Section */}
         <div className="modern-card" style={{ marginBottom: '24px' }}>
-          <div className="card-header">
-            <div>
-              <div className="card-title">Chọn File Đã Phân Tích</div>
-              <div className="card-subtitle">Chọn file đã được phân tích để kiểm tra GDPR</div>
-            </div>
-          </div>
           <FileSelector 
             onFileSelect={handleFileSelect}
             selectedFileId={selectedFile?.processing_id}
@@ -939,21 +878,87 @@ function GDPRPage() {
             <div className="card-title">Tất Cả File Đã Phân Tích</div>
             <div className="card-subtitle">Danh sách đầy đủ các file và dữ liệu đã được phân tích từ database</div>
           </div>
-          <button 
-            onClick={loadAllFiles} 
-            className="btn-modern btn-secondary" 
-            disabled={loadingFiles}
-            style={{ fontSize: '0.9rem', padding: '8px 16px' }}
-          >
-            {loadingFiles ? (
-              <>
-                <span className="gdpr-btn-spinner" style={{ marginRight: '8px', width: '12px', height: '12px' }}></span>
-                Đang tải...
-              </>
-            ) : (
-              '🔄 Làm mới'
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.85rem', color: 'var(--gray-600)' }}>
+              Trang {currentPage}/{totalPages} ({totalFiles} file)
+            </span>
+            <button 
+              onClick={() => loadAllFiles(currentPage)} 
+              className="btn-modern btn-secondary" 
+              disabled={loadingFiles}
+              style={{ fontSize: '0.9rem', padding: '8px 16px' }}
+            >
+              {loadingFiles ? (
+                <>
+                  <span className="gdpr-btn-spinner" style={{ marginRight: '8px', width: '12px', height: '12px' }}></span>
+                  Đang tải...
+                </>
+              ) : (
+                '🔄 Làm mới'
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Search Box */}
+        <div style={{ marginBottom: '20px', padding: '0 20px' }}>
+          <div style={{ position: 'relative' }}>
+            <input
+              type="text"
+              placeholder="🔍 Tìm kiếm tên file..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
+              style={{
+                width: '100%',
+                padding: '12px 16px 12px 44px',
+                border: '1px solid var(--gray-300)',
+                borderRadius: '8px',
+                fontSize: '0.95rem',
+                outline: 'none',
+                transition: 'all 0.2s'
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = 'var(--purple-primary)';
+                e.target.style.boxShadow = '0 0 0 3px rgba(139, 92, 246, 0.1)';
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = 'var(--gray-300)';
+                e.target.style.boxShadow = 'none';
+              }}
+            />
+            <span style={{
+              position: 'absolute',
+              left: '16px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              fontSize: '1.2rem'
+            }}>🔍</span>
+            {searchQuery && (
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setCurrentPage(1);
+                }}
+                style={{
+                  position: 'absolute',
+                  right: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '1.2rem',
+                  cursor: 'pointer',
+                  color: 'var(--gray-500)',
+                  padding: '4px'
+                }}
+              >
+                ✕
+              </button>
             )}
-          </button>
+          </div>
         </div>
 
         {loadingFiles ? (
@@ -1194,6 +1199,78 @@ function GDPRPage() {
                 );
               })}
             </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'center', 
+                alignItems: 'center', 
+                gap: '8px',
+                marginTop: '24px',
+                padding: '16px'
+              }}>
+                <button
+                  className="btn-modern btn-secondary"
+                  onClick={() => loadAllFiles(currentPage - 1)}
+                  disabled={currentPage === 1 || loadingFiles}
+                  style={{ fontSize: '0.9rem', padding: '8px 16px' }}
+                >
+                  ← Trước
+                </button>
+                
+                <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                  {(() => {
+                    // Luôn hiển thị đúng 3 nút số trang
+                    let pagesToShow = [];
+                    
+                    if (totalPages <= 3) {
+                      // Nếu tổng số trang <= 3, hiển thị tất cả
+                      for (let i = 1; i <= totalPages; i++) {
+                        pagesToShow.push(i);
+                      }
+                    } else {
+                      // Nếu tổng số trang > 3
+                      if (currentPage === 1) {
+                        // Trang đầu: hiển thị 1, 2, 3
+                        pagesToShow = [1, 2, 3];
+                      } else if (currentPage === totalPages) {
+                        // Trang cuối: hiển thị 3 trang cuối
+                        pagesToShow = [totalPages - 2, totalPages - 1, totalPages];
+                      } else {
+                        // Trang giữa: hiển thị trang trước, trang hiện tại, trang sau
+                        pagesToShow = [currentPage - 1, currentPage, currentPage + 1];
+                      }
+                    }
+                    
+                    return pagesToShow.map(pageNum => (
+                      <button
+                        key={pageNum}
+                        className={`btn-modern ${currentPage === pageNum ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => loadAllFiles(pageNum)}
+                        disabled={loadingFiles}
+                        style={{ 
+                          fontSize: '0.9rem', 
+                          padding: '8px 12px',
+                          minWidth: '40px'
+                        }}
+                      >
+                        {pageNum}
+                      </button>
+                    ));
+                  })()}
+                </div>
+                
+                <button
+                  className="btn-modern btn-secondary"
+                  onClick={() => loadAllFiles(currentPage + 1)}
+                  disabled={currentPage === totalPages || loadingFiles}
+                  style={{ fontSize: '0.9rem', padding: '8px 16px' }}
+                >
+                  Sau →
+                </button>
+              </div>
+            )}
 
             {/* Summary Stats */}
             <div style={{ 
