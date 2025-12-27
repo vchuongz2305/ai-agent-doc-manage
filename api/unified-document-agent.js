@@ -231,16 +231,43 @@ const RESULT_WEBHOOKS = {
 const processingStatus = new Map();
 
 // PostgreSQL Connection Pool
-const pgPool = new Pool({
-  host: process.env.POSTGRES_HOST || 'localhost',
-  port: process.env.POSTGRES_PORT || 5432,
-  database: process.env.POSTGRES_DATABASE || 'document_management',
-  user: process.env.POSTGRES_USER || 'doc_user',
-  password: process.env.POSTGRES_PASSWORD || '',
-  max: 20, // Maximum number of clients in the pool
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-});
+// Support both DATABASE_URL (Render format) and individual env vars
+let pgConfig = {};
+
+if (process.env.DATABASE_URL) {
+  // Parse DATABASE_URL (format: postgresql://user:password@host:port/database)
+  console.log('📊 Using DATABASE_URL for PostgreSQL connection');
+  pgConfig = {
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.DATABASE_URL.includes('amazonaws.com') || process.env.DATABASE_URL.includes('render.com') 
+      ? { rejectUnauthorized: false } 
+      : false,
+    max: 20,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+  };
+} else {
+  // Use individual environment variables
+  console.log('📊 Using individual PostgreSQL environment variables');
+  pgConfig = {
+    host: process.env.POSTGRES_HOST || 'localhost',
+    port: parseInt(process.env.POSTGRES_PORT || '5432', 10),
+    database: process.env.POSTGRES_DATABASE || 'document_management',
+    user: process.env.POSTGRES_USER || 'doc_user',
+    password: process.env.POSTGRES_PASSWORD || '',
+    max: 20,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+  };
+  
+  // Log config (without password)
+  console.log('   Host:', pgConfig.host);
+  console.log('   Port:', pgConfig.port);
+  console.log('   Database:', pgConfig.database);
+  console.log('   User:', pgConfig.user);
+}
+
+const pgPool = new Pool(pgConfig);
 
 // Test PostgreSQL connection on startup
 pgPool.on('connect', () => {
