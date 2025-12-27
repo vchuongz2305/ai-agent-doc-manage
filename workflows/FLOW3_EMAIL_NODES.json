@@ -1,0 +1,35 @@
+{
+  "nodes_to_add": [
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  id,\n  processing_id,\n  audit_id,\n  file_name,\n  file_url,\n  cloudinary_url,\n  user_id,\n  department,\n  uploader,\n  analysis_results,\n  gdpr_decision,\n  gdpr_justification,\n  legal_basis,\n  retention_days,\n  redaction_fields,\n  personal_data_found,\n  sensitive_data_detected,\n  data_volume,\n  notify_dpo,\n  status,\n  gdpr_action_performed,\n  ai_decision_timestamp,\n  gdpr_completed_at,\n  workflow_source,\n  flow2_completed\nFROM gdpr_compliance_results \nWHERE processing_id = '{{ $json.processing_id }}' \nORDER BY created_at DESC \nLIMIT 1;",
+        "options": {}
+      },
+      "name": "🔍 Query GDPR từ Database",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [2400, 144],
+      "credentials": {
+        "postgres": {
+          "id": "lYVcMJl3c3m62cYc",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 📋 Merge dữ liệu GDPR từ database với dữ liệu chia sẻ\nconst gdprData = $json || {};\nconst originalData = $input.first().json || {};\n\nconsole.log('=== 📋 MERGE GDPR DATA ===');\nconsole.log('GDPR Data from DB:', gdprData);\nconsole.log('Original Data:', originalData);\n\n// Format dữ liệu personal_data_found\nlet personalDataFound = [];\nif (gdprData.personal_data_found) {\n  if (Array.isArray(gdprData.personal_data_found)) {\n    personalDataFound = gdprData.personal_data_found;\n  } else if (typeof gdprData.personal_data_found === 'string') {\n    try {\n      personalDataFound = JSON.parse(gdprData.personal_data_found);\n    } catch (e) {\n      personalDataFound = [gdprData.personal_data_found];\n    }\n  }\n}\n\n// Format dữ liệu redaction_fields\nlet redactionFields = [];\nif (gdprData.redaction_fields) {\n  if (Array.isArray(gdprData.redaction_fields)) {\n    redactionFields = gdprData.redaction_fields;\n  } else if (typeof gdprData.redaction_fields === 'string') {\n    try {\n      redactionFields = JSON.parse(gdprData.redaction_fields);\n    } catch (e) {\n      redactionFields = [gdprData.redaction_fields];\n    }\n  }\n}\n\n// Format personal data found cho email\nlet personalDataFoundText = 'Không có';\nif (personalDataFound && personalDataFound.length > 0) {\n  personalDataFoundText = personalDataFound.map(item => {\n    if (typeof item === 'string') return item;\n    return JSON.stringify(item);\n  }).join(', ');\n}\n\n// Format redaction fields cho email\nlet redactionFieldsText = 'Không có';\nif (redactionFields && redactionFields.length > 0) {\n  redactionFieldsText = redactionFields.join(', ');\n}\n\n// Merge tất cả dữ liệu\nconst mergedData = {\n  // Giữ nguyên dữ liệu gốc\n  ...originalData,\n  \n  // Dữ liệu GDPR từ database (ưu tiên)\n  gdpr_decision: gdprData.gdpr_decision || originalData.gdpr_decision || null,\n  gdpr_justification: gdprData.gdpr_justification || originalData.gdpr_justification || null,\n  legal_basis: gdprData.legal_basis || originalData.legal_basis || null,\n  retention_days: gdprData.retention_days || originalData.retention_days || 30,\n  sensitive_data_detected: gdprData.sensitive_data_detected !== undefined ? gdprData.sensitive_data_detected : (originalData.sensitive_data_detected !== undefined ? originalData.sensitive_data_detected : false),\n  data_volume: gdprData.data_volume || originalData.data_volume || 'Không xác định',\n  notify_dpo: gdprData.notify_dpo !== undefined ? gdprData.notify_dpo : (originalData.notify_dpo !== undefined ? originalData.notify_dpo : false),\n  ai_decision_timestamp: gdprData.ai_decision_timestamp || gdprData.gdpr_completed_at || originalData.ai_decision_timestamp || new Date().toISOString(),\n  \n  // Format arrays\n  personal_data_found: personalDataFound,\n  personal_data_found_text: personalDataFoundText,\n  redaction_fields: redactionFields,\n  redaction_fields_text: redactionFieldsText,\n  \n  // Thông tin file (ưu tiên từ database)\n  file_name: gdprData.file_name || originalData.file_name || 'Không xác định',\n  file_url: gdprData.file_url || gdprData.cloudinary_url || originalData.file_url || originalData.cloudinary_url || 'Không có URL',\n  processing_id: gdprData.processing_id || originalData.processing_id || 'Không có',\n  \n  // Email recipients\n  recipient_emails: originalData.recipient_emails || originalData.shareWithEmails || [],\n  shareWithEmails: originalData.shareWithEmails || originalData.recipient_emails || []\n};\n\nconsole.log('✅ Merged data for email:');\nconsole.log('   File Name:', mergedData.file_name);\nconsole.log('   Processing ID:', mergedData.processing_id);\nconsole.log('   GDPR Decision:', mergedData.gdpr_decision);\nconsole.log('   Personal Data Found:', mergedData.personal_data_found_text);\nconsole.log('   Redaction Fields:', mergedData.redaction_fields_text);\nconsole.log('=== END 📋 MERGE GDPR DATA ===');\n\nreturn [{ json: mergedData }];"
+      },
+      "name": "📋 Merge GDPR Data cho Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2560, 144]
+    }
+  ],
+  "email_template": {
+    "subject": "Kết quả kiểm tra GDPR và chia sẻ tài liệu: {{ $json.file_name }}",
+    "message": "Kính chào bạn,\n\nHệ thống AI GDPR Compliance Agent đã hoàn tất việc kiểm tra tuân thủ GDPR cho tài liệu của bạn.\n\n**Thông tin tài liệu:**\n\n- Tên file: {{ $json.file_name || 'Không xác định' }}\n- Processing ID: {{ $json.processing_id || 'Không có' }}\n- URL file: {{ $json.file_url || 'Không có URL' }}\n\n**🔍 Kết quả phân tích nội dung:**\n\n- Dữ liệu cá nhân tìm thấy: {{ $json.personal_data_found_text || 'Không có' }}\n- Dữ liệu nhạy cảm: {{ $json.sensitive_data_detected ? 'Có' : 'Không' }}\n- Khối lượng dữ liệu: {{ $json.data_volume || 'Không xác định' }}\n\n**Kết quả quyết định GDPR:**\n\n- Quyết định xử lý: **{{ $json.gdpr_decision || 'Không xác định' }}**\n- Thông báo DPO: {{ $json.notify_dpo ? 'Có' : 'Không' }}\n- Cơ sở pháp lý: {{ $json.legal_basis || 'Không có' }}\n- Thời gian lưu trữ: {{ $json.retention_days || 30 }} ngày\n- Các trường cần redact: {{ $json.redaction_fields_text || 'Không có' }}\n\n**Lý do quyết định:**\n\n{{ $json.gdpr_justification || 'Không có lý do được cung cấp.' }}\n\n**Thời điểm ra quyết định:** {{ $json.ai_decision_timestamp || (new Date()).toISOString() }}\n\nNếu bạn có bất kỳ thắc mắc nào về kết quả này, vui lòng liên hệ với bộ phận bảo mật dữ liệu (DPO) để được hỗ trợ.\n\nTrân trọng,\n\n**AI GDPR Compliance Agent**"
+  }
+}
+

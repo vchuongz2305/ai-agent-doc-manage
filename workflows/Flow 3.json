@@ -1,132 +1,34 @@
 {
-  "name": "Tran Ha Duy - Sharing file",
+  "name": "My workflow 7",
   "nodes": [
     {
       "parameters": {
-        "httpMethod": "POST",
-        "path": "document-management",
-        "responseMode": "responseNode",
-        "options": {
-          "rawBody": true
-        }
-      },
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2.1,
-      "position": [
-        -1720,
-        496
-      ],
-      "id": "webhook-flow3-sharing",
-      "name": "1️⃣ Webhook - Nhận processingId",
-      "webhookId": "document-management-webhook-flow3"
-    },
-    {
-      "parameters": {
-        "method": "GET",
-        "url": "={{ $json.api_url || `https://api.aidocmanageagent.io.vn/api/document/get-from-postgres/${$json.processingId || $json.processing_id}` }}",
-        "options": {
-          "timeout": 30000,
-          "retry": {
-            "enabled": true,
-            "maxRetries": 3,
-            "retryDelay": 2000
-          }
-        }
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        -1520,
-        496
-      ],
-      "id": "get-data-from-api-flow3",
-      "name": "2️⃣ Get Data from API"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Extract và format dữ liệu từ API response cho Flow 3 (Document Sharing)\nconst apiResponse = $json || {};\nconst documentData = apiResponse.data || {};\n\n// Validate dữ liệu\nif (!documentData.processing_id) {\n  console.error('❌ Invalid API response: missing processing_id');\n  throw new Error('Invalid API response: missing processing_id');\n}\n\n// Extract analysis results\nconst analysisResults = documentData.analysis_results || {};\n\n// Format dữ liệu cho Flow 3 (Document Sharing)\nconst formattedData = {\n  // Thông tin document\n  processingId: documentData.processing_id,\n  documentTitle: documentData.file_name || 'Unknown Document',\n  file_url: documentData.file_url || documentData.cloudinary_url || '',\n  cloudinary_url: documentData.cloudinary_url || documentData.file_url || '',\n  docx_url: documentData.docx_url || '',\n  \n  // Thông tin user\n  user_id: documentData.user_id || '',\n  department: documentData.department || '',\n  \n  // Analysis results từ Flow 1\n  analysis_results: analysisResults,\n  \n  // Metadata\n  status: documentData.status || 'completed',\n  created_at: documentData.created_at || '',\n  analysis_completed_at: documentData.analysis_completed_at || '',\n  \n  // Fields cho logic chia sẻ\n  documentCategory: documentData.department || 'Chung',\n  hasPersonalInfo: true, // Có thể check từ analysis_results\n  documentSummary: analysisResults.main_theme || `Tài liệu ${documentData.file_name}`,\n  sharingReason: `Chia sẻ tài liệu ${documentData.file_name} đã được phân tích`,\n  securityLevel: 'medium',\n  needApproval: false,\n  accessLevel: 'reader',\n  expirationDays: 30,\n  \n  // Thông tin file\n  originalFileId: documentData.processing_id,\n  fileId: documentData.processing_id,\n  fileName: documentData.file_name || 'Unknown Document',\n  fileSize: 'Unknown',\n  uploadDate: documentData.created_at || new Date().toISOString(),\n  uploader: documentData.user_id || 'unknown@example.com',\n  mimeType: 'application/pdf',\n  webViewLink: documentData.file_url || documentData.cloudinary_url || '',\n  webContentLink: documentData.file_url || documentData.cloudinary_url || '',\n  \n  // Metadata hệ thống\n  receivedAt: new Date().toISOString(),\n  workflowSource: 'flow1-api',\n  uniqueKey: `${documentData.processing_id}_${Date.now()}`,\n  createdTime: documentData.created_at || new Date().toISOString(),\n  modifiedTime: documentData.updated_at || new Date().toISOString()\n};\n\nconsole.log('📊 Formatted data for Flow 3 (Document Sharing):', JSON.stringify(formattedData, null, 2));\n\nreturn [{ json: formattedData }];"
+        "jsCode": "// 📥 XỬ LÝ DỮ LIỆU TỪ FLOW 2 + FRONTEND\nconsole.log('=== FLOW 3 - XỬ LÝ DỮ LIỆU ĐẦU VÀO ===');\nconsole.log('Raw input data:', JSON.stringify($json, null, 2));\n\nconst input = $json || {};\nconst body = input.body || {};\n\n// ============================================\n// Parse dữ liệu từ Flow 2 (GDPR Compliance)\n// ============================================\nconst processingId = input.processing_id || input.processingId || body.processing_id || body.processingId || null;\nconst fileName = input.file_name || input.fileName || body.file_name || body.fileName || null;\nconst fileUrl = input.file_url || input.fileUrl || body.file_url || body.fileUrl || null;\nconst cloudinaryUrl = input.cloudinary_url || input.cloudinaryUrl || body.cloudinary_url || body.cloudinaryUrl || null;\nconst userId = input.user_id || input.userId || body.user_id || body.userId || null;\nconst department = input.department || body.department || null;\n\n// Dữ liệu GDPR từ Flow 2\nconst gdprDecision = input.gdpr_decision || input.gdprDecision || body.gdpr_decision || body.gdprDecision || null;\nconst legalBasis = input.legal_basis || input.legalBasis || body.legal_basis || body.legalBasis || null;\nconst retentionDays = input.retention_days || input.retentionDays || body.retention_days || body.retentionDays || 30;\nconst gdprJustification = input.gdpr_justification || input.gdprJustification || body.gdpr_justification || body.gdprJustification || null;\n\n// ============================================\n// Parse dữ liệu email từ Frontend\n// ============================================\n// Frontend sẽ gửi recipient_emails hoặc recipientEmails\nlet recipientEmails = [];\nif (input.recipient_emails) {\n  recipientEmails = Array.isArray(input.recipient_emails) ? input.recipient_emails : String(input.recipient_emails).split(',').map(e => e.trim());\n} else if (input.recipientEmails) {\n  recipientEmails = Array.isArray(input.recipientEmails) ? input.recipientEmails : String(input.recipientEmails).split(',').map(e => e.trim());\n} else if (body.recipient_emails) {\n  recipientEmails = Array.isArray(body.recipient_emails) ? body.recipient_emails : String(body.recipient_emails).split(',').map(e => e.trim());\n} else if (body.recipientEmails) {\n  recipientEmails = Array.isArray(body.recipientEmails) ? body.recipientEmails : String(body.recipientEmails).split(',').map(e => e.trim());\n}\n\n// Validate emails\nconst emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\nrecipientEmails = recipientEmails.filter(email => email && emailRegex.test(email.trim())).map(e => e.trim());\n\n// Recipient names (optional)\nlet recipientNames = [];\nif (input.recipient_names) {\n  recipientNames = Array.isArray(input.recipient_names) ? input.recipient_names : String(input.recipient_names).split(',').map(n => n.trim());\n} else if (input.recipientNames) {\n  recipientNames = Array.isArray(input.recipientNames) ? input.recipientNames : String(input.recipientNames).split(',').map(n => n.trim());\n}\n\n// Sharing method từ frontend\nconst sharingMethod = input.sharing_method || input.sharingMethod || body.sharing_method || body.sharingMethod || 'email';\nconst accessLevel = input.access_level || input.accessLevel || body.access_level || body.accessLevel || 'viewer';\n\n// Validate dữ liệu\nif (!processingId) {\n  console.error('❌ CRITICAL: No processing_id found');\n  return [{ json: { error: true, message: 'Missing processing_id', input } }];\n}\n\nif (recipientEmails.length === 0) {\n  console.error('❌ CRITICAL: No recipient emails provided');\n  return [{ json: { error: true, message: 'Missing recipient_emails', input } }];\n}\n\n// Tạo dữ liệu hoàn chỉnh\nconst processedData = {\n  // Thông tin cơ bản\n  processing_id: processingId,\n  sharing_id: `share_${processingId}_${Date.now()}`,\n  file_name: fileName || 'Unknown',\n  file_url: fileUrl || null,\n  cloudinary_url: cloudinaryUrl || fileUrl || null,\n  docx_url: input.docx_url || input.docxUrl || body.docx_url || body.docxUrl || null,\n  user_id: userId || null,\n  department: department || null,\n  \n  // Thông tin chia sẻ từ frontend\n  recipient_emails: recipientEmails,\n  recipient_names: recipientNames.length > 0 ? recipientNames : recipientEmails.map(() => ''),\n  sharing_method: sharingMethod,\n  access_level: accessLevel,\n  \n  // Thông tin GDPR từ Flow 2\n  gdpr_decision: gdprDecision,\n  gdpr_approved: true, // Frontend đã approve\n  legal_basis: legalBasis,\n  retention_days: retentionDays,\n  \n  // Status\n  status: 'pending',\n  sharing_status: 'queued',\n  \n  // Email tracking\n  email_sent: false,\n  email_sent_at: null,\n  email_subject: null,\n  email_body: null,\n  \n  // Timestamps\n  created_at: new Date().toISOString(),\n  updated_at: new Date().toISOString(),\n  sharing_requested_at: new Date().toISOString(),\n  sharing_completed_at: null,\n  \n  // Metadata\n  workflow_source: 'flow3-document-sharing',\n  flow3_completed: false,\n  notes: null,\n  \n  // Dữ liệu bổ sung cho workflow (compatibility)\n  documentTitle: fileName || 'Tài liệu',\n  documentCategory: department || 'Chung',\n  shareWithEmails: recipientEmails, // Alias cho compatibility\n  sharingReason: `Chia sẻ tài liệu ${fileName || 'này'} sau khi đã kiểm tra GDPR`,\n  needApproval: false, // Không cần phê duyệt vì frontend đã approve\n  securityLevel: gdprDecision === 'delete' ? 'high' : (gdprDecision === 'anonymize' ? 'medium' : 'low'),\n  hasPersonalInfo: gdprDecision !== 'allow',\n  accessLevel: accessLevel, // Alias\n  expirationDays: retentionDays,\n  webViewLink: fileUrl || cloudinaryUrl || null,\n  originalFileId: processingId,\n  fileId: processingId\n};\n\nconsole.log('✅ Đã xử lý dữ liệu:');\nconsole.log('   Processing ID:', processedData.processing_id);\nconsole.log('   File Name:', processedData.file_name);\nconsole.log('   Recipient Emails:', processedData.recipient_emails);\nconsole.log('   GDPR Decision:', processedData.gdpr_decision);\nconsole.log('   Sharing Method:', processedData.sharing_method);\nconsole.log('=== END FLOW 3 - XỬ LÝ DỮ LIỆU ĐẦU VÀO ===');\n\nreturn [{ json: processedData }];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1320,
-        496
+        704,
+        144
       ],
-      "id": "b03120ad-96c8-4f5e-987e-e84effeb33e7",
-      "name": "3️⃣ Format Data for Sharing"
+      "id": "56a8ff91-cd03-42aa-9521-c26ab3904762",
+      "name": "2️⃣ Xử lý dữ liệu từ Flow 2 + Frontend"
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 1
-          },
-          "conditions": [
-            {
-              "id": "approval-condition",
-              "leftValue": "={{ $json.needApproval }}",
-              "rightValue": false,
-              "operator": {
-                "type": "boolean",
-                "operation": "equals"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "d08d3c75-b9f4-45d2-80ce-4fddbc19f54e",
-      "name": "5️⃣ Cần phê duyệt?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        -720,
-        208
-      ]
-    },
-    {
-      "parameters": {
-        "sendTo": "={{ ($json.shareWithEmails && $json.shareWithEmails.length > 0) ? $json.shareWithEmails.join(',') : 'manager@company.com,admin@company.com' }}",
-        "subject": "🔐 Yêu cầu phê duyệt chia sẻ tài liệu: {{ $json.documentTitle }}",
-        "emailType": "text",
-        "message": "**TÀI LIỆU CẦN PHÊ DUYỆT CHIA SẺ**\n\n📄 **Tiêu đề:** {{ $json.documentTitle }}\n📂 **Loại:** {{ $json.documentCategory }}\n🔒 **Mức bảo mật:** {{ $json.securityLevel }}\n👤 **Có thông tin cá nhân:** {{ $json.hasPersonalInfo ? 'Có' : 'Không' }}\n\n**Đề xuất chia sẻ với (theo Bảng Nhân sự):**\n{{ $json.shareWithEmails.join('\\n') }}\n\n**Lý do:** {{ $json.sharingReason }}\n\nVui lòng xem xét và phê duyệt.\n\n---\n*Tự động bởi Document Management Agent*",
-        "options": {}
-      },
-      "id": "418f945c-a237-49fb-af91-0955c511cfa5",
-      "name": "6️⃣ Gửi yêu cầu phê duyệt",
-      "type": "n8n-nodes-base.gmail",
-      "typeVersion": 2,
-      "position": [
-        -448,
-        192
-      ],
-      "webhookId": "46a7ba35-2d6d-40ec-afaa-f753a9b4a13e",
-      "credentials": {
-        "gmailOAuth2": {
-          "id": "LTZtTwz14XXGyrdz",
-          "name": "Gmail account 2"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "sendTo": "={{ ($json.shareWithEmails && $json.shareWithEmails.length > 0) ? $json.shareWithEmails.join(',') : 'test@example.com' }}",
+        "sendTo": "={{ ($json.recipient_emails && $json.recipient_emails.length > 0) ? $json.recipient_emails.join(',') : ($json.shareWithEmails && $json.shareWithEmails.length > 0 ? $json.shareWithEmails.join(',') : 'test@example.com') }}",
         "subject": "={{ `📄 Tài liệu được chia sẻ: ${$json.documentTitle || 'Tài liệu'}` }}",
         "emailType": "text",
         "message": "={{ `**TÀI LIỆU ĐÃ ĐƯỢC CHIA SẺ VỚI BẠN**\n\n📄 **Tiêu đề:** ${$json.documentTitle || 'Tài liệu'}\n📂 **Loại:** ${$json.documentCategory || 'Chung'}\n👥 **Chia sẻ bởi:** Document Management Agent\n🔐 **Quyền truy cập:** ${$json.accessLevel || 'reader'}\n⏰ **Hết hạn:** ${new Date($json.expirationDate || Date.now() + 30*24*60*60*1000).toLocaleDateString('vi-VN')}\n\n**Tóm tắt nội dung:**\n${$json.documentSummary || `Tài liệu ${$json.documentTitle || 'này'} được tạo mới từ Google Drive và chứa thông tin quan trọng liên quan đến ${$json.documentCategory || 'dự án'}. Tài liệu này được chia sẻ để đảm bảo tất cả thành viên trong team có thể truy cập và tham khảo khi cần thiết.`}\n\n**Lý do chia sẻ:**\n${$json.sharingReason || `Chia sẻ tài liệu ${$json.documentTitle || 'này'} với tất cả thành viên trong team để:\n• Đảm bảo thông tin được cập nhật đồng bộ\n• Tạo điều kiện cho việc cộng tác hiệu quả\n• Duy trì tính minh bạch trong quá trình làm việc\n• Hỗ trợ việc ra quyết định dựa trên dữ liệu chính xác`}\n\n🔗 **Link truy cập:**\n${$json.webViewLink || 'Không có link'}\n\n${$json.permissionStatus === 'SUCCESS' ? '✅ **Quyền truy cập đã được cấp tự động**\\nBạn có thể truy cập tài liệu ngay bây giờ!' : '⚠️ **Có lỗi trong quá trình cấp quyền**\\nVui lòng liên hệ admin để được hỗ trợ.'}\n\n📊 **Thống kê:**\n- Số người được chia sẻ: ${$json.sharedWithCount || 0}\n- Trạng thái: ${$json.permissionStatus || 'UNKNOWN'}\n- Thời gian cấp quyền: ${$json.permissionsGrantedAt ? new Date($json.permissionsGrantedAt).toLocaleString('vi-VN') : 'N/A'}\n\n---\n*Tự động bởi Document Management Agent v2*` }}",
         "options": {}
       },
-      "id": "8c7e9e1c-1f7e-4539-90d4-e2e5fdf46c28",
+      "id": "fc430108-c572-4d71-a229-abec5a3cf08f",
       "name": "8️⃣ Gửi thông báo chia sẻ",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2,
       "position": [
-        -224,
-        768
+        2000,
+        416
       ],
       "webhookId": "dbe6151e-6197-4992-ab65-2065968cbcb5",
       "credentials": {
@@ -138,260 +40,49 @@
     },
     {
       "parameters": {
-        "operation": "append",
-        "documentId": {
-          "__rl": true,
-          "value": "1rpmrc8NnLjQKUKp3TfDOUTPA87UGWQMZU3CdNiZ5JZg",
-          "mode": "list",
-          "cachedResultName": "log hoat dong",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1rpmrc8NnLjQKUKp3TfDOUTPA87UGWQMZU3CdNiZ5JZg/edit?usp=drivesdk"
-        },
-        "sheetName": {
-          "__rl": true,
-          "value": "gid=0",
-          "mode": "list",
-          "cachedResultName": "Trang tính1",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1rpmrc8NnLjQKUKp3TfDOUTPA87UGWQMZU3CdNiZ5JZg/edit#gid=0"
-        },
-        "columns": {
-          "mappingMode": "autoMapInputData",
-          "value": {},
-          "matchingColumns": [
-            "id"
-          ],
-          "schema": [
-            {
-              "id": "emailId",
-              "displayName": "emailId",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "emailThreadId",
-              "displayName": "emailThreadId",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "emailLabelIds",
-              "displayName": "emailLabelIds",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "emailSentAt",
-              "displayName": "emailSentAt",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "workflowSource",
-              "displayName": "workflowSource",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "processingTimestamp",
-              "displayName": "processingTimestamp",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "status",
-              "displayName": "status",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "documentTitle",
-              "displayName": "documentTitle",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "documentCategory",
-              "displayName": "documentCategory",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "shareWithEmails",
-              "displayName": "shareWithEmails",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "accessLevel",
-              "displayName": "accessLevel",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "expirationDays",
-              "displayName": "expirationDays",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "needApproval",
-              "displayName": "needApproval",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "sharingReason",
-              "displayName": "sharingReason",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "securityLevel",
-              "displayName": "securityLevel",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "hasPersonalInfo",
-              "displayName": "hasPersonalInfo",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "id",
-              "displayName": "id",
-              "required": false,
-              "defaultMatch": true,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "threadId",
-              "displayName": "threadId",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "labelIds",
-              "displayName": "labelIds",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "aiDecisionTimestamp",
-              "displayName": "aiDecisionTimestamp",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": false
-        },
+        "jsCode": "// 🔧 Format dữ liệu cho PostgreSQL INSERT\n// Lấy dữ liệu từ node trước\nconst data = $json;\n\n// Helper function để escape SQL strings\nfunction escapeSQL(str) {\n  if (!str) return null;\n  return String(str).replace(/'/g, \"''\").replace(/\\\\/g, '\\\\\\\\');\n}\n\n// Helper function để format PostgreSQL array\nfunction formatPostgresArray(arr) {\n  if (!Array.isArray(arr) || arr.length === 0) return 'ARRAY[]::TEXT[]';\n  const escaped = arr.map(item => `'${escapeSQL(String(item))}'`).join(', ');\n  return `ARRAY[${escaped}]`;\n}\n\n// Helper function để format timestamp - xử lý empty string và null\nfunction formatTimestamp(value) {\n  if (!value || value === '' || value === null || value === undefined) {\n    return 'CURRENT_TIMESTAMP';\n  }\n  // Nếu là ISO string hợp lệ, format thành timestamp\n  try {\n    const date = new Date(value);\n    if (isNaN(date.getTime())) {\n      return 'CURRENT_TIMESTAMP';\n    }\n    return `'${date.toISOString()}'::timestamp`;\n  } catch (e) {\n    return 'CURRENT_TIMESTAMP';\n  }\n}\n\n// Format các giá trị\nconst result = {\n  ...data,\n  // Format arrays cho PostgreSQL\n  recipient_emails_sql: formatPostgresArray(data.recipient_emails || data.shareWithEmails || []),\n  recipient_names_sql: formatPostgresArray(data.recipient_names || []),\n  // Format text fields (escape quotes)\n  email_subject_sql: data.email_subject || data.emailSubject ? `'${escapeSQL(data.email_subject || data.emailSubject)}'` : 'NULL',\n  email_body_sql: data.email_body || data.emailBody ? `'${escapeSQL(data.email_body || data.emailBody)}'` : 'NULL',\n  share_link_sql: data.share_link || data.shareLink ? `'${escapeSQL(data.share_link || data.shareLink)}'` : 'NULL',\n  notes_sql: data.notes ? `'${escapeSQL(data.notes)}'` : 'NULL',\n  // Format timestamps - xử lý empty string\n  created_at_sql: formatTimestamp(data.created_at),\n  updated_at_sql: formatTimestamp(data.updated_at),\n  sharing_requested_at_sql: data.sharing_requested_at && data.sharing_requested_at !== '' ? formatTimestamp(data.sharing_requested_at) : 'NULL',\n  sharing_completed_at_sql: data.sharing_completed_at && data.sharing_completed_at !== '' ? formatTimestamp(data.sharing_completed_at) : 'NULL',\n  email_sent_at_sql: data.email_sent_at && data.email_sent_at !== '' ? formatTimestamp(data.email_sent_at) : 'NULL'\n};\n\nconsole.log('✅ Đã format dữ liệu cho PostgreSQL INSERT');\nconsole.log('   created_at_sql:', result.created_at_sql);\nconsole.log('   updated_at_sql:', result.updated_at_sql);\n\nreturn [{ json: result }];"
+      },
+      "name": "9️⃣.5️⃣ Format Data cho PostgreSQL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2208,
+        416
+      ],
+      "id": "format-data-for-postgres-flow3"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO document_sharing (\n  processing_id, sharing_id, file_name, file_url, cloudinary_url, docx_url, user_id, department,\n  recipient_emails, recipient_names, sharing_method, share_link, access_level,\n  gdpr_decision, gdpr_approved, legal_basis, retention_days,\n  status, sharing_status, email_sent, email_sent_at, email_subject, email_body,\n  created_at, updated_at, sharing_requested_at, sharing_completed_at,\n  workflow_source, flow3_completed, notes\n) VALUES (\n  '{{ $json.processing_id }}',\n  '{{ $json.sharing_id }}',\n  {{ $json.file_name ? `'${$json.file_name}'` : 'NULL' }},\n  {{ $json.file_url ? `'${$json.file_url}'` : 'NULL' }},\n  {{ $json.cloudinary_url ? `'${$json.cloudinary_url}'` : 'NULL' }},\n  {{ $json.docx_url ? `'${$json.docx_url}'` : 'NULL' }},\n  {{ $json.user_id ? `'${$json.user_id}'` : 'NULL' }},\n  {{ $json.department ? `'${$json.department}'` : 'NULL' }},\n  {{ $json.recipient_emails_sql }},\n  {{ $json.recipient_names_sql }},\n  '{{ $json.sharing_method || 'email' }}',\n  {{ $json.share_link_sql }},\n  '{{ $json.access_level || 'viewer' }}',\n  {{ $json.gdpr_decision ? `'${$json.gdpr_decision}'` : 'NULL' }},\n  {{ $json.gdpr_approved !== undefined ? $json.gdpr_approved : true }},\n  {{ $json.legal_basis ? `'${$json.legal_basis}'` : 'NULL' }},\n  {{ $json.retention_days || 30 }},\n  '{{ $json.status || 'sent' }}',\n  {{ $json.sharing_status ? `'${$json.sharing_status}'` : 'NULL' }},\n  {{ $json.email_sent !== undefined ? $json.email_sent : true }},\n  {{ ($json.email_sent_at_sql) || ($json.email_sent_at && $json.email_sent_at !== '' ? `'${$json.email_sent_at}'::timestamp` : 'NULL') }},\n  {{ $json.email_subject_sql }},\n  {{ $json.email_body_sql }},\n  {{ ($json.created_at_sql) || ($json.created_at && $json.created_at !== '' ? `'${$json.created_at}'::timestamp` : 'CURRENT_TIMESTAMP') }},\n  {{ ($json.updated_at_sql) || ($json.updated_at && $json.updated_at !== '' ? `'${$json.updated_at}'::timestamp` : 'CURRENT_TIMESTAMP') }},\n  {{ ($json.sharing_requested_at_sql) || ($json.sharing_requested_at && $json.sharing_requested_at !== '' ? `'${$json.sharing_requested_at}'::timestamp` : 'NULL') }},\n  {{ ($json.sharing_completed_at_sql) || ($json.sharing_completed_at && $json.sharing_completed_at !== '' ? `'${$json.sharing_completed_at}'::timestamp` : 'CURRENT_TIMESTAMP') }},\n  '{{ $json.workflow_source || 'flow3-document-sharing' }}',\n  {{ $json.flow3_completed !== undefined ? $json.flow3_completed : true }},\n  {{ $json.notes_sql }}\n) ON CONFLICT (sharing_id) DO UPDATE SET\n  status = EXCLUDED.status,\n  sharing_status = EXCLUDED.sharing_status,\n  email_sent = EXCLUDED.email_sent,\n  email_sent_at = EXCLUDED.email_sent_at,\n  email_subject = EXCLUDED.email_subject,\n  email_body = EXCLUDED.email_body,\n  sharing_completed_at = EXCLUDED.sharing_completed_at,\n  flow3_completed = EXCLUDED.flow3_completed,\n  updated_at = CURRENT_TIMESTAMP\nRETURNING *;",
         "options": {}
       },
-      "id": "87ed2e5b-ce3f-4e67-aec9-b4dba9c909f3",
-      "name": "9️⃣ Ghi log hoạt động chia sẻ",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.7,
+      "name": "9️⃣ Lưu kết quả chia sẻ vào PostgreSQL",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
       "position": [
-        160,
-        768
+        2384,
+        416
       ],
+      "id": "58b052b2-994e-4214-869d-69701748e080",
       "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "cmWSNW94QNgr3T8o",
-          "name": "Google Sheets account"
+        "postgres": {
+          "id": "lYVcMJl3c3m62cYc",
+          "name": "Postgres account"
         }
       }
     },
     {
       "parameters": {
-        "jsCode": "// Merge dữ liệu từ email response với dữ liệu chia sẻ gốc\nconst emailResponse = $json;\nconst originalData = $input.first().json;\n\nconsole.log('=== 📊 MERGE EMAIL DATA ===');\nconsole.log('Email response:', emailResponse);\nconsole.log('Original data:', originalData);\n\nconst mergedData = {\n  // Dữ liệu email\n  emailId: emailResponse.id,\n  emailThreadId: emailResponse.threadId,\n  emailLabelIds: emailResponse.labelIds,\n  emailSentAt: new Date().toISOString(),\n  \n  // Dữ liệu tài liệu\n  documentTitle: originalData.documentTitle,\n  documentCategory: originalData.documentCategory,\n  shareWithEmails: originalData.shareWithEmails,\n  accessLevel: originalData.accessLevel,\n  expirationDays: originalData.expirationDays,\n  needApproval: originalData.needApproval,\n  sharingReason: originalData.sharingReason,\n  securityLevel: originalData.securityLevel,\n  hasPersonalInfo: originalData.hasPersonalInfo,\n  workflowSource: originalData.workflowSource || 'flow-2',\n  \n  // Dữ liệu cấp quyền\n  permissionStatus: originalData.permissionStatus,\n  sharedWithCount: originalData.sharedWithCount,\n  permissionsGrantedAt: originalData.permissionsGrantedAt,\n  grantedPermissions: originalData.grantedPermissions,\n  \n  // Metadata\n  processingTimestamp: new Date().toISOString(),\n  status: 'EMAIL_SENT_SUCCESSFULLY'\n};\n\nconsole.log('🔍 MERGED DATA FOR LOGGING:');\nconsole.log('- Document Title:', mergedData.documentTitle);\nconsole.log('- Share With Emails:', mergedData.shareWithEmails);\nconsole.log('- Permission Status:', mergedData.permissionStatus);\nconsole.log('- Shared With Count:', mergedData.sharedWithCount);\nconsole.log('- Email ID:', mergedData.emailId);\n\nconsole.log('Full merged data:', JSON.stringify(mergedData, null, 2));\nconsole.log('=== END 📊 MERGE EMAIL DATA ===');\n\nreturn { json: mergedData };"
+        "jsCode": "// 📊 Merge dữ liệu từ email response với dữ liệu chia sẻ gốc\nconst emailResponse = $json;\nconst originalData = $input.first().json;\n\nconsole.log('=== 📊 MERGE EMAIL DATA ===');\nconsole.log('Email response:', emailResponse);\nconsole.log('Original data:', originalData);\n\n// Merge tất cả dữ liệu\nconst mergedData = {\n  // Giữ nguyên tất cả dữ liệu từ originalData\n  ...originalData,\n  \n  // Dữ liệu email từ Gmail node\n  emailId: emailResponse.id || null,\n  emailThreadId: emailResponse.threadId || null,\n  emailLabelIds: emailResponse.labelIds || null,\n  emailSentAt: new Date().toISOString(),\n  \n  // Cập nhật status\n  email_sent: true,\n  email_sent_at: new Date().toISOString(),\n  email_subject: originalData.emailSubject || `📄 Tài liệu được chia sẻ: ${originalData.file_name || originalData.documentTitle || 'Tài liệu'}`,\n  email_body: originalData.emailMessage || originalData.email_body || null,\n  status: 'sent',\n  sharing_status: 'completed',\n  sharing_completed_at: new Date().toISOString(),\n  flow3_completed: true,\n  updated_at: new Date().toISOString()\n};\n\nconsole.log('✅ MERGED DATA FOR POSTGRESQL:');\nconsole.log('   Processing ID:', mergedData.processing_id);\nconsole.log('   Sharing ID:', mergedData.sharing_id);\nconsole.log('   Recipient Emails:', mergedData.recipient_emails);\nconsole.log('   Email Sent:', mergedData.email_sent);\nconsole.log('   Status:', mergedData.status);\nconsole.log('=== END 📊 MERGE EMAIL DATA ===');\n\nreturn [{ json: mergedData }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -16,
-        768
+        2208,
+        416
       ],
-      "id": "d3f84ab0-1cf9-496a-8b7a-f81c5e92ebef",
+      "id": "9ceb6807-7b42-4885-93a8-29032494892d",
       "name": "📊 Merge Email Data"
     },
     {
@@ -401,13 +92,13 @@
           "notes": "=Tai lieu can chia se : {{ $('7️⃣ Tạo link chia sẻ').item.json.documentTitle }}\nLy do chia se: {{ $('7️⃣ Tạo link chia sẻ').item.json.sharingReason }}\nHet han: {{ $('7️⃣ Tạo link chia sẻ').item.json.expirationDays }}\nChia se voi: {{ $('7️⃣ Tạo link chia sẻ').item.json.shareWithEmails.join(\",\") }}\n"
         }
       },
-      "id": "cd4f3df8-6b17-4844-b03e-339d7f2f95f7",
+      "id": "9faddc9c-18a9-41f0-b57b-090d11a96faf",
       "name": "1️⃣2️⃣ Tạo task theo dõi",
       "type": "n8n-nodes-base.googleTasks",
       "typeVersion": 1,
       "position": [
-        384,
-        768
+        2608,
+        416
       ],
       "credentials": {
         "googleTasksOAuth2Api": {
@@ -418,28 +109,28 @@
     },
     {
       "parameters": {
-        "jsCode": "// MERGE DỮ LIỆU TỪ GOOGLE DRIVE VỚI AI DECISION\nconsole.log('=== 7️⃣ TẠO LINK CHIA SẺ - MERGE DATA ===');\nconsole.log('Current input (AI data):', JSON.stringify($json, null, 2));\n\n// Lấy dữ liệu từ Google Drive (từ node '4️⃣ Lọc Email nhân sự')\nconst googleDriveData = $('4️⃣ Lọc Email nhân sự').item.json || {};\nconsole.log('Google Drive data:', JSON.stringify(googleDriveData, null, 2));\n\n// Lấy dữ liệu từ AI (input hiện tại)\nconst aiData = $json || {};\n\n// MERGE DỮ LIỆU: Google Drive + AI Decision\nconst mergedData = {\n  // Dữ liệu từ Google Drive (ưu tiên cao)\n  documentTitle: googleDriveData.documentTitle || 'Tài liệu không có tên',\n  originalFileId: googleDriveData.originalFileId || 'unknown_file_id',\n  fileId: googleDriveData.fileId || googleDriveData.originalFileId,\n  fileName: googleDriveData.fileName || googleDriveData.documentTitle,\n  webViewLink: googleDriveData.webViewLink || '',\n  webContentLink: googleDriveData.webContentLink || '',\n  mimeType: googleDriveData.mimeType || 'unknown',\n  fileSize: googleDriveData.fileSize || 'Unknown',\n  uploader: googleDriveData.uploader || 'unknown@example.com',\n  uploadDate: googleDriveData.uploadDate || new Date().toISOString(),\n  documentCategory: googleDriveData.documentCategory || 'Chung',\n  \n  // Dữ liệu từ AI Decision\n  needApproval: aiData.needApproval || false,\n  securityLevel: aiData.securityLevel || 'medium',\n  sharingReason: aiData.sharingReason || `Chia sẻ tài liệu ${googleDriveData.documentTitle || 'không có tên'}`,\n  riskAssessment: aiData.riskAssessment || 'Không có đánh giá rủi ro',\n  recommendation: aiData.recommendation || 'Không có khuyến nghị',\n  \n  // Dữ liệu mặc định\n  accessLevel: 'reader',\n  expirationDays: 30,\n  shareWithEmails: ['danghongnguyen0175@gmail.com', 'tranhaduy204@gmail.com', 'congbui@gmail.com'],\n  hasPersonalInfo: false,\n  workflowSource: 'google-drive-trigger',\n  \n  // Metadata\n  aiDecisionTimestamp: aiData.aiDecisionTimestamp || new Date().toISOString(),\n  processingTimestamp: new Date().toISOString(),\n  uniqueKey: googleDriveData.uniqueKey || `${googleDriveData.originalFileId}_${Date.now()}`\n};\n\nconsole.log('🔗 MERGED DATA:');\nconsole.log('- Document Title:', mergedData.documentTitle);\nconsole.log('- File ID:', mergedData.originalFileId);\nconsole.log('- WebView Link:', mergedData.webViewLink);\nconsole.log('- Need Approval:', mergedData.needApproval);\nconsole.log('- Security Level:', mergedData.securityLevel);\n\n// Tạo tóm tắt nội dung chi tiết\nconst documentSummary = `Tài liệu ${mergedData.documentTitle} được tạo mới từ Google Drive và chứa thông tin quan trọng liên quan đến ${mergedData.documentCategory}. Tài liệu này được chia sẻ để đảm bảo tất cả thành viên trong team có thể truy cập và tham khảo khi cần thiết.`;\n\n// Tạo lý do chia sẻ chi tiết\nconst detailedSharingReason = `Chia sẻ tài liệu ${mergedData.documentTitle} với tất cả thành viên trong team để:\n• Đảm bảo thông tin được cập nhật đồng bộ\n• Tạo điều kiện cho việc cộng tác hiệu quả\n• Duy trì tính minh bạch trong quá trình làm việc\n• Hỗ trợ việc ra quyết định dựa trên dữ liệu chính xác`;\n\n// Tạo nội dung email sẵn sàng\nconst emailSubject = `📄 Tài liệu được chia sẻ: ${mergedData.documentTitle}`;\nconst emailMessage = `**TÀI LIỆU ĐÃ ĐƯỢC CHIA SẺ VỚI BẠN**\n\n📄 **Tiêu đề:** ${mergedData.documentTitle}\n📂 **Loại:** ${mergedData.documentCategory}\n👥 **Chia sẻ bởi:** Document Management Agent\n🔐 **Quyền truy cập:** ${mergedData.accessLevel}\n⏰ **Hết hạn:** ${new Date(Date.now() + mergedData.expirationDays * 24 * 60 * 60 * 1000).toLocaleDateString('vi-VN')}\n\n**Tóm tắt nội dung:**\n${documentSummary}\n\n**Lý do chia sẻ:**\n${detailedSharingReason}\n\n🔗 **Link truy cập:**\n${mergedData.webViewLink}\n\n---\n*Tự động bởi Document Management Agent v2*`;\n\n// Thêm nội dung email vào dữ liệu\nconst finalData = {\n  ...mergedData,\n  documentSummary: documentSummary,\n  sharingReason: detailedSharingReason,\n  emailSubject,\n  emailMessage,\n  emailRecipients: mergedData.shareWithEmails.join(',')\n};\n\nconsole.log('Full merged data:', JSON.stringify(finalData, null, 2));\nconsole.log('=== END 7️⃣ TẠO LINK CHIA SẺ ===');\n\nreturn [{ json: finalData }];"
+        "jsCode": "// 📋 TẠO LINK CHIA SẺ VÀ CHUẨN BỊ EMAIL\nconsole.log('=== 7️⃣ TẠO LINK CHIA SẺ ===');\nconsole.log('Input data:', JSON.stringify($json, null, 2));\n\nconst inputData = $json || {};\n\n// Lấy dữ liệu từ input (đã được xử lý từ node trước)\nconst processedData = {\n  // Giữ nguyên tất cả dữ liệu từ input\n  ...inputData,\n  \n  // Đảm bảo các trường cần thiết\n  documentTitle: inputData.file_name || inputData.documentTitle || 'Tài liệu',\n  fileName: inputData.file_name || inputData.fileName || 'Tài liệu',\n  fileId: inputData.processing_id || inputData.originalFileId || inputData.fileId,\n  originalFileId: inputData.processing_id || inputData.originalFileId || inputData.fileId,\n  webViewLink: inputData.file_url || inputData.cloudinary_url || inputData.webViewLink || '',\n  documentCategory: inputData.department || inputData.documentCategory || 'Chung',\n  \n  // Email recipients từ frontend\n  shareWithEmails: inputData.recipient_emails || inputData.shareWithEmails || [],\n  recipient_emails: inputData.recipient_emails || inputData.shareWithEmails || [],\n  \n  // Access level và sharing info\n  accessLevel: inputData.access_level || inputData.accessLevel || 'viewer',\n  expirationDays: inputData.retention_days || inputData.expirationDays || 30,\n  sharingReason: inputData.sharingReason || `Chia sẻ tài liệu ${inputData.file_name || 'này'} sau khi đã kiểm tra GDPR`,\n  \n  // Security info từ GDPR\n  securityLevel: inputData.gdpr_decision === 'delete' ? 'high' : (inputData.gdpr_decision === 'anonymize' ? 'medium' : 'low'),\n  hasPersonalInfo: inputData.gdpr_decision !== 'allow',\n  \n  // GDPR data từ Flow 2 (đảm bảo có đầy đủ)\n  gdpr_decision: inputData.gdpr_decision || null,\n  legal_basis: inputData.legal_basis || null,\n  retention_days: inputData.retention_days || 30,\n  gdpr_justification: inputData.gdpr_justification || null,\n  \n  // Metadata\n  workflowSource: 'flow3-document-sharing',\n  processingTimestamp: new Date().toISOString()\n};\n\n// Tạo tóm tắt nội dung\nconst documentSummary = `Tài liệu ${processedData.documentTitle} đã được kiểm tra GDPR và sẵn sàng chia sẻ. Tài liệu này chứa thông tin quan trọng liên quan đến ${processedData.documentCategory}.`;\n\n// Tạo lý do chia sẻ\nconst detailedSharingReason = `Chia sẻ tài liệu ${processedData.documentTitle} với các thành viên được chỉ định sau khi đã kiểm tra GDPR:\n• Tài liệu đã được đánh giá tuân thủ GDPR\n• Quyết định GDPR: ${processedData.gdpr_decision || 'N/A'}\n• Cơ sở pháp lý: ${processedData.legal_basis || 'N/A'}\n• Thời gian lưu trữ: ${processedData.retention_days || 30} ngày`;\n\n// Tạo nội dung email\nconst emailSubject = `📄 Tài liệu được chia sẻ: ${processedData.documentTitle}`;\nconst emailMessage = `**TÀI LIỆU ĐÃ ĐƯỢC CHIA SẺ VỚI BẠN**\n\n📄 **Tiêu đề:** ${processedData.documentTitle}\n📂 **Loại:** ${processedData.documentCategory}\n👥 **Chia sẻ bởi:** Document Management Agent\n🔐 **Quyền truy cập:** ${processedData.accessLevel}\n⏰ **Hết hạn:** ${new Date(Date.now() + processedData.expirationDays * 24 * 60 * 60 * 1000).toLocaleDateString('vi-VN')}\n\n**Tóm tắt nội dung:**\n${documentSummary}\n\n**Lý do chia sẻ:**\n${detailedSharingReason}\n\n🔗 **Link truy cập:**\n${processedData.webViewLink || 'Không có link'}\n\n---\n*Tự động bởi Document Management Agent v2*`;\n\n// Merge tất cả dữ liệu\nconst finalData = {\n  ...processedData,\n  documentSummary,\n  sharingReason: detailedSharingReason,\n  emailSubject,\n  emailMessage,\n  emailRecipients: Array.isArray(processedData.shareWithEmails) ? processedData.shareWithEmails.join(',') : processedData.shareWithEmails\n};\n\nconsole.log('✅ Final data for sharing:');\nconsole.log('- Document Title:', finalData.documentTitle);\nconsole.log('- File ID:', finalData.originalFileId);\nconsole.log('- Share With Emails:', finalData.shareWithEmails);\nconsole.log('- Access Level:', finalData.accessLevel);\nconsole.log('=== END 7️⃣ TẠO LINK CHIA SẺ ===');\n\nreturn [{ json: finalData }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -272,
-        496
+        1952,
+        144
       ],
-      "id": "f8e8076c-d71b-4f3d-b9e0-1d234dfd8afd",
+      "id": "c1b2e322-7b3c-4d39-b82f-9a69f072d2be",
       "name": "7️⃣ Tạo link chia sẻ"
     },
     {
       "parameters": {
-        "jsCode": "// 🔐 TẠO DANH SÁCH QUYỀN CHO TẤT CẢ EMAIL\nconsole.log('=== 🔐 TẠO DANH SÁCH QUYỀN GOOGLE DRIVE ===');\n\nconst inputData = $json || {};\nconst fileId = inputData.originalFileId || inputData.fileId;\nconst shareWithEmails = inputData.shareWithEmails || [];\nconst accessLevel = inputData.accessLevel || 'reader';\n\nconsole.log('File ID:', fileId);\nconsole.log('Share with emails:', shareWithEmails);\nconsole.log('Access level:', accessLevel);\n\n// Validate email format\nconst emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\nconst validEmails = shareWithEmails.filter(email => {\n  const isValid = email && typeof email === 'string' && emailRegex.test(email.trim());\n  if (!isValid) {\n    console.warn(`⚠️ Invalid email format: ${email}`);\n  }\n  return isValid;\n}).map(email => email.trim());\n\nconsole.log(`Valid emails: ${validEmails.length}/${shareWithEmails.length}`);\nconsole.log('Valid emails:', validEmails);\n\n// Kiểm tra nếu không có email hợp lệ\nif (validEmails.length === 0) {\n  console.error('❌ No valid emails found!');\n  return [{ json: { \n    ...inputData,\n    error: true,\n    errorMessage: 'No valid emails found for sharing',\n    fileId: fileId,\n    permissions: []\n  }}];\n}\n\n// Tạo danh sách quyền cho tất cả email hợp lệ\nconst permissions = validEmails.map(email => ({\n  role: accessLevel === 'writer' ? 'writer' : 'reader',\n  type: 'user',\n  emailAddress: email\n}));\n\nconsole.log('Generated permissions:', JSON.stringify(permissions, null, 2));\n\n// Tạo dữ liệu cho Google Drive node\nconst driveShareData = {\n  fileId: fileId,\n  permissions: permissions,\n  sendNotificationEmails: false,\n  supportsAllDrives: true,\n  // Giữ nguyên dữ liệu gốc\n  ...inputData,\n  // Thêm thông tin validation\n  validEmailsCount: validEmails.length,\n  invalidEmailsCount: shareWithEmails.length - validEmails.length\n};\n\nconsole.log('Drive share data:', JSON.stringify(driveShareData, null, 2));\nconsole.log('=== END 🔐 TẠO DANH SÁCH QUYỀN ===');\n\nreturn [{ json: driveShareData }];"
+        "jsCode": "// 🔐 TẠO DANH SÁCH QUYỀN CHO TẤT CẢ EMAIL\nconsole.log('=== 🔐 TẠO DANH SÁCH QUYỀN GOOGLE DRIVE ===');\n\nconst inputData = $json || {};\nconst fileId = inputData.originalFileId || inputData.fileId || inputData.processing_id;\n\n// Lấy emails từ nhiều nguồn và format thành array\nlet shareWithEmails = [];\nif (Array.isArray(inputData.shareWithEmails)) {\n  shareWithEmails = inputData.shareWithEmails;\n} else if (Array.isArray(inputData.recipient_emails)) {\n  shareWithEmails = inputData.recipient_emails;\n} else if (typeof inputData.shareWithEmails === 'string') {\n  shareWithEmails = inputData.shareWithEmails.split(/[,\\n]/).map(e => e.trim()).filter(e => e);\n} else if (typeof inputData.recipient_emails === 'string') {\n  shareWithEmails = inputData.recipient_emails.split(/[,\\n]/).map(e => e.trim()).filter(e => e);\n}\n\nconst accessLevel = inputData.accessLevel || inputData.access_level || 'reader';\n\nconsole.log('File ID:', fileId);\nconsole.log('Share with emails:', shareWithEmails);\nconsole.log('Access level:', accessLevel);\n\n// Validate email format\nconst emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\nconst validEmails = shareWithEmails.filter(email => {\n  const isValid = email && typeof email === 'string' && emailRegex.test(email.trim());\n  if (!isValid) {\n    console.warn(`⚠️ Invalid email format: ${email}`);\n  }\n  return isValid;\n}).map(email => email.trim());\n\nconsole.log(`Valid emails: ${validEmails.length}/${shareWithEmails.length}`);\nconsole.log('Valid emails:', validEmails);\n\n// Kiểm tra nếu không có email hợp lệ\nif (validEmails.length === 0) {\n  console.error('❌ No valid emails found!');\n  return [{ json: { \n    ...inputData,\n    error: true,\n    errorMessage: 'No valid emails found for sharing',\n    fileId: fileId,\n    permissions: []\n  }}];\n}\n\n// Tạo danh sách quyền cho tất cả email hợp lệ\nconst permissions = validEmails.map(email => ({\n  role: accessLevel === 'writer' ? 'writer' : 'reader',\n  type: 'user',\n  emailAddress: email\n}));\n\nconsole.log('Generated permissions:', JSON.stringify(permissions, null, 2));\n\n// Tạo dữ liệu cho Google Drive node\nconst driveShareData = {\n  fileId: fileId,\n  permissions: permissions,\n  sendNotificationEmails: false,\n  supportsAllDrives: true,\n  // Giữ nguyên dữ liệu gốc\n  ...inputData,\n  // Thêm thông tin validation\n  validEmailsCount: validEmails.length,\n  invalidEmailsCount: shareWithEmails.length - validEmails.length\n};\n\nconsole.log('Drive share data:', JSON.stringify(driveShareData, null, 2));\nconsole.log('=== END 🔐 TẠO DANH SÁCH QUYỀN ===');\n\nreturn [{ json: driveShareData }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -112,
-        496
+        2112,
+        144
       ],
-      "id": "271f69bc-4734-4571-9812-0e96dbdcee4c",
+      "id": "f53202ef-91b5-4912-9665-39f58e2e00c3",
       "name": "🔐 Chuẩn bị quyền truy cập"
     },
     {
@@ -449,10 +140,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        48,
-        496
+        2272,
+        144
       ],
-      "id": "bb8a9cf2-fdfa-4dfb-9fe0-d0557bdee860",
+      "id": "d7e290fe-5b33-4eeb-9c5d-316f831860e0",
       "name": "🔐 Cấp quyền Google Drive"
     },
     {
@@ -462,201 +153,45 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        208,
-        496
+        2432,
+        144
       ],
-      "id": "808f2ec2-814c-4fd4-a32d-08689e7d849f",
+      "id": "db60dfe2-a4e8-4637-9d57-8b32a9de319b",
       "name": "🛡️ Xử lý kết quả cấp quyền"
     },
     {
       "parameters": {
         "content": "### LUỒNG 3: DOCUMENT MANAGEMENT\n\n**Mục đích:** Tự động quản lý và chia sẻ tài liệu dựa trên danh sách nhân sự từ Google Sheets."
       },
-      "id": "ca594245-f6d3-43d0-9f0f-97c96b7d564a",
+      "id": "42b0b919-8dcc-49a5-a9dd-cc6e47c5a7d2",
       "name": "📋 Mô tả Luồng",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -1920,
+        304,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "document-sharing",
+        "options": {}
+      },
+      "name": "1️⃣ Webhook Trigger (từ Flow 2 + Frontend)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        464,
         144
-      ]
-    },
-    {
-      "parameters": {
-        "pollTimes": {
-          "item": [
-            {
-              "mode": "everyMinute"
-            }
-          ]
-        },
-        "triggerOn": "specificFolder",
-        "folderToWatch": {
-          "__rl": true,
-          "value": "1ljFE5ps4YaFfYP1VKzY4i8NTb42ZPi0o",
-          "mode": "list",
-          "cachedResultName": "Extract thong tin Tran Ha Duy",
-          "cachedResultUrl": "https://drive.google.com/drive/folders/1ljFE5ps4YaFfYP1VKzY4i8NTb42ZPi0o"
-        },
-        "event": "fileCreated",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.googleDriveTrigger",
-      "typeVersion": 1,
-      "position": [
-        -1728,
-        496
       ],
-      "id": "0e8e4181-d419-48dd-ad58-43060b1488af",
-      "name": "Google Drive Trigger",
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "atJ86VdDoYyS4tiT",
-          "name": "Google Drive account 2"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "documentId": {
-          "__rl": true,
-          "value": "13XGSk44zleoBpkFd6NO9-a72Yxy8X30A_IkQtzLQ83g",
-          "mode": "list",
-          "cachedResultName": "nhan su ",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/13XGSk44zleoBpkFd6NO9-a72Yxy8X30A_IkQtzLQ83g/edit?usp=drivesdk"
-        },
-        "sheetName": {
-          "__rl": true,
-          "value": 284405409,
-          "mode": "list",
-          "cachedResultName": "nha su ",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/13XGSk44zleoBpkFd6NO9-a72Yxy8X30A_IkQtzLQ83g/edit#gid=284405409"
-        },
-        "options": {}
-      },
-      "id": "6c08bc4e-9512-4db2-807c-0e77dd17e2ed",
-      "name": "3️⃣ Lấy toàn bộ nhân sự",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.7,
-      "position": [
-        -1376,
-        336
-      ],
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "cmWSNW94QNgr3T8o",
-          "name": "Google Sheets account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Debug: Log toàn bộ dữ liệu đầu vào\nconsole.log('=== 4️⃣ LỌC EMAIL NHÂN SỰ - INPUT DATA ===');\nconsole.log('Raw input data from Google Sheets:', JSON.stringify($input.all(), null, 2));\n\n// KIỂM TRA NẾU CẦN BỎ QUA\nconst originalData = $('2️⃣ Xử lý dữ liệu đầu vào').item.json;\nif (originalData.skip === true) {\n  console.log('⚠️ Bỏ qua xử lý email vì file quá cũ');\n  return [{ json: { skip: true, reason: originalData.reason } }];\n}\n\n// originalData đã được khai báo ở trên\nconst documentTitle = originalData.documentTitle || '';\nconst documentCategory = originalData.documentCategory || 'Chung';\n\nconsole.log(`File từ Luồng 1: \"${documentTitle}\" -> Phòng ban: \"${documentCategory}\"`);\n\n// Lấy toàn bộ danh sách nhân sự từ Google Sheets (đây là một mảng)\nconst danhSachNhanSu = $input.all();\nconsole.log(`Tổng số nhân viên trong bảng: ${danhSachNhanSu.length}`);\n\n// Debug: Log cấu trúc dữ liệu nhân sự\nif (danhSachNhanSu.length > 0) {\n  console.log('Cấu trúc dữ liệu nhân sự mẫu:', {\n    keys: Object.keys(danhSachNhanSu[0].json || {}),\n    sample: danhSachNhanSu[0].json\n  });\n}\n\n// GỬI CHO TẤT CẢ NHÂN VIÊN TRONG BẢNG NHÂN SỰ\nconsole.log('Gửi cho tất cả nhân viên trong bảng nhân sự');\n\n// Lấy email của tất cả nhân viên\nconst emailList = danhSachNhanSu.map(nhanVien => {\n  const email = nhanVien.json.Email || nhanVien.json.email || nhanVien.json.EmailAddress;\n  const hoTen = nhanVien.json.HoTen || nhanVien.json.Ten || nhanVien.json.Name || 'Unknown';\n  const phongBan = nhanVien.json.PhongBan || nhanVien.json.PhongBan || nhanVien.json.phongban;\n  console.log(`Nhân viên: ${hoTen} (${phongBan}) - Email: ${email}`);\n  return email;\n}).filter(email => email && email.trim() !== ''); // Lọc bỏ email rỗng\n\nconsole.log(`Danh sách email cuối cùng (${emailList.length} email):`, emailList);\n\n// Phương án dự phòng nếu không tìm thấy email nào\nif (emailList.length === 0) {\n  console.warn('Không tìm thấy email nào. Sử dụng email fallback.');\n  emailList.push('danghongnguyen0175@gmail.com', 'tranhaduy204@gmail.com', 'congbui@gmail.com');\n}\n\n// Đảm bảo có đầy đủ các trường cần thiết\nconst finalData = {\n  ...originalData,\n  shareWithEmails: emailList,\n  sharingReason: `Chia sẻ tài liệu \"${documentTitle}\" cho tất cả nhân viên trong công ty`,\n  // Đảm bảo có các trường cần thiết cho email\n  accessLevel: originalData.accessLevel || 'reader',\n  expirationDays: originalData.expirationDays || 30,\n  documentTitle: originalData.documentTitle || 'Tài liệu không có tên',\n  documentCategory: originalData.documentCategory || 'Chung',\n  documentSummary: originalData.documentSummary || `Tài liệu ${documentTitle} được chia sẻ từ Luồng 1`,\n  originalFileId: originalData.originalFileId || 'unknown_file_id',\n  fileSize: originalData.fileSize || 'Unknown',\n  securityLevel: originalData.securityLevel || 'medium',\n  // QUAN TRỌNG: Đặt needApproval = false để không cần phê duyệt\n  needApproval: false\n};\n\nconsole.log('=== FINAL DATA FROM EMAIL FILTER ===');\nconsole.log('Final data with all required fields:', {\n  documentTitle: finalData.documentTitle,\n  documentCategory: finalData.documentCategory,\n  shareWithEmails: finalData.shareWithEmails,\n  sharingReason: finalData.sharingReason,\n  needApproval: finalData.needApproval\n});\nconsole.log('=== END 4️⃣ LỌC EMAIL NHÂN SỰ ===');\n\nreturn [{ json: finalData }];"
-      },
-      "id": "d650b836-1256-4cfc-9f42-53d39b1c6ab3",
-      "name": "4️⃣ Lọc Email nhân sự",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -1232,
-        480
-      ]
-    },
-    {
-      "parameters": {
-        "resource": "document",
-        "modelId": {
-          "__rl": true,
-          "value": "models/gemini-2.5-flash",
-          "mode": "list",
-          "cachedResultName": "models/gemini-2.5-flash"
-        },
-        "text": "Bạn là một AI chuyên quyết định chia sẻ tài liệu. Dựa trên dữ liệu đầu vào, hãy quyết định có cần phê duyệt hay không.\n\nDữ liệu đầu vào có thể chứa:\n- documentTitle: tiêu đề tài liệu\n- documentCategory: loại tài liệu\n- hasPersonalInfo: có thông tin cá nhân\n- shareWithEmails: danh sách email sẽ nhận\n- securityLevel: mức độ bảo mật\n\nYêu cầu:\n1. Phân tích tài liệu để xác định mức độ nhạy cảm\n2. Quyết định có cần phê duyệt hay không\n3. Xác định mức độ bảo mật\n4. Đánh giá rủi ro chia sẻ\n\nQUAN TRỌNG: needApproval PHẢI là boolean (true/false)!\n\nTrả về JSON với cấu trúc:\n{\n  \"needApproval\": false,\n  \"securityLevel\": \"medium\",\n  \"sharingReason\": \"Lý do chia sẻ\",\n  \"riskAssessment\": \"Đánh giá rủi ro\",\n  \"recommendation\": \"Khuyến nghị\"\n}\n\nChỉ trả về JSON, không giải thích.",
-        "options": {}
-      },
-      "id": "f61ba3ab-c27c-4217-ad3c-907c2b9d6caf",
-      "name": "🤖 AI Quyết định phê duyệt",
-      "type": "@n8n/n8n-nodes-langchain.googleGemini",
-      "typeVersion": 1,
-      "position": [
-        -1056,
-        320
-      ],
-      "credentials": {
-        "googlePalmApi": {
-          "id": "XVtVZk5W7pbY5uMP",
-          "name": "Google Gemini(PaLM) Api account 2"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Parse kết quả từ AI với error handling\nlet aiDecision = {};\n\ntry {\n  // Lấy response từ AI\n  const rawResponse = $json?.content?.parts?.[0]?.text || \n                    $json?.parts?.[0]?.text || \n                    $json?.text || \n                    JSON.stringify($json);\n\n  console.log('Raw AI Response:', rawResponse);\n\n  // Làm sạch response\n  const cleanResponse = rawResponse\n    .replace(/```json/gi, '')\n    .replace(/```/g, '')\n    .replace(/\\n/g, ' ')\n    .replace(/\\r/g, '')\n    .trim();\n\n  // Tìm JSON trong response\n  const jsonMatch = cleanResponse.match(/\\{[\\s\\S]*\\}/);\n  const jsonString = jsonMatch ? jsonMatch[0] : cleanResponse;\n\n  console.log('Cleaned JSON String:', jsonString);\n\n  // Parse JSON\n  aiDecision = JSON.parse(jsonString);\n  \n} catch (error) {\n  console.error('Error parsing AI response:', error);\n  \n  // Fallback data nếu parse lỗi\n  aiDecision = {\n    needApproval: false,\n    securityLevel: 'medium',\n    sharingReason: 'AI parse error - fallback decision',\n    riskAssessment: 'Low risk',\n    recommendation: 'Proceed with sharing'\n  };\n}\n\n// Merge với dữ liệu gốc\nconst finalData = {\n  ...$input.first().json, // Dữ liệu từ node trước\n  needApproval: aiDecision.needApproval !== undefined ? aiDecision.needApproval : false,\n  securityLevel: aiDecision.securityLevel || 'medium',\n  sharingReason: aiDecision.sharingReason || 'AI quyết định',\n  riskAssessment: aiDecision.riskAssessment || 'Low risk',\n  recommendation: aiDecision.recommendation || 'Proceed with sharing',\n  aiDecisionTimestamp: new Date().toISOString(),\n  processingTimestamp: new Date().toISOString()\n};\n\nconsole.log('Final Data with AI decision:', finalData);\n\nreturn [{ json: finalData }];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -880,
-        528
-      ],
-      "id": "bc98f84e-accf-449a-8575-6a8dd40a8937",
-      "name": "📋 Parse quyết định AI"
+      "id": "1ec23240-191a-4746-8acf-f107bd86a816",
+      "webhookId": "document-sharing-webhook"
     }
   ],
   "pinData": {},
   "connections": {
-    "1️⃣ Webhook - Nhận processingId": {
-      "main": [
-        [
-          {
-            "node": "2️⃣ Get Data from API",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "2️⃣ Get Data from API": {
-      "main": [
-        [
-          {
-            "node": "3️⃣ Format Data for Sharing",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "3️⃣ Format Data for Sharing": {
-      "main": [
-        [
-          {
-            "node": "3️⃣ Lấy toàn bộ nhân sự",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "5️⃣ Cần phê duyệt?": {
-      "main": [
-        [
-          {
-            "node": "6️⃣ Gửi yêu cầu phê duyệt",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "7️⃣ Tạo link chia sẻ",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "6️⃣ Gửi yêu cầu phê duyệt": {
+    "2️⃣ Xử lý dữ liệu từ Flow 2 + Frontend": {
       "main": [
         [
           {
@@ -722,66 +257,36 @@
         ]
       ]
     },
-    "9️⃣ Ghi log hoạt động chia sẻ": {
+    "9️⃣.5️⃣ Format Data cho PostgreSQL": {
       "main": [
         [
           {
-            "node": "1️⃣2️⃣ Tạo task theo dõi",
+            "node": "9️⃣ Lưu kết quả chia sẻ vào PostgreSQL",
             "type": "main",
             "index": 0
           }
         ]
       ]
+    },
+    "9️⃣ Lưu kết quả chia sẻ vào PostgreSQL": {
+      "main": []
     },
     "📊 Merge Email Data": {
       "main": [
         [
           {
-            "node": "9️⃣ Ghi log hoạt động chia sẻ",
+            "node": "9️⃣.5️⃣ Format Data cho PostgreSQL",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "3️⃣ Lấy toàn bộ nhân sự": {
+    "1️⃣ Webhook Trigger (từ Flow 2 + Frontend)": {
       "main": [
         [
           {
-            "node": "4️⃣ Lọc Email nhân sự",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "4️⃣ Lọc Email nhân sự": {
-      "main": [
-        [
-          {
-            "node": "🤖 AI Quyết định phê duyệt",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "🤖 AI Quyết định phê duyệt": {
-      "main": [
-        [
-          {
-            "node": "📋 Parse quyết định AI",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "📋 Parse quyết định AI": {
-      "main": [
-        [
-          {
-            "node": "5️⃣ Cần phê duyệt?",
+            "node": "2️⃣ Xử lý dữ liệu từ Flow 2 + Frontend",
             "type": "main",
             "index": 0
           }
@@ -789,15 +294,14 @@
       ]
     }
   },
-  "active": true,
+  "active": false,
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "02dbf16e-d4c9-4ebe-be07-4305bcba3316",
+  "versionId": "ecca035b-2f27-4533-ae68-9367cf17aa3f",
   "meta": {
-    "templateCredsSetupCompleted": true,
     "instanceId": "d29aff038a4897a8be0d9843c07ba06d6b485556105b19c20835a7b0bfd5b9b2"
   },
-  "id": "O1ePtvyRVk7Ek0jj",
+  "id": "cH0GMq5NGDdw6rBH",
   "tags": []
 }

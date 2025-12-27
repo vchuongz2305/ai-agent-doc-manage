@@ -1,72 +1,78 @@
 {
-  "name": "Bui Cong Chuong - check GDPR",
+  "name": "Test gdpt",
   "nodes": [
     {
       "parameters": {
-        "content": "### LUỒNG 2: AI DOCUMENT MANAGEMENT AGENT – GDPR COMPLIANCE (Fixed Clean)\n\n**Mục đích:** Tự động kiểm tra tuân thủ GDPR cho tài liệu.\n\n**Tính năng chính:**\n• AI quyết định hành động GDPR (delete/anonymize/allow)\n• Xác định legal basis, DSR, retention\n• Tự động thông báo DPO khi cần\n• Ghi log và audit trail đầy đủ.\n\n**Cải tiến:**\n• Sửa lỗi phân nhánh If/Else chuẩn.\n• Thêm Merge node để hợp nhất các nhánh hành động."
+        "content": "### LUỒNG 2: AI DOCUMENT MANAGEMENT AGENT – GDPR COMPLIANCE (Updated)\n\n**Mục đích:** Tự động kiểm tra tuân thủ GDPR cho tài liệu từ Flow 1.\n\n**Tính năng chính:**\n• Đợi Flow 1 hoàn thành và nhận dữ liệu qua webhook\n• AI quyết định hành động GDPR (delete/anonymize/allow)\n• Xác định legal basis, DSR, retention\n• Lưu kết quả vào Google Sheets\n• Frontend query kết quả qua endpoint GET /gdpr\n• Frontend quyết định có gửi tới Flow 3 hay không\n\n**Cải tiến:**\n• Loại bỏ logic gửi email tự động\n• Thêm endpoint HTTP GET để frontend query kết quả\n• Frontend tự quyết định gửi tới Flow 3"
       },
       "name": "📋 Mô tả Luồng GDPR",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -1760,
-        -448
+        0,
+        0
       ],
-      "id": "44b8796f-bd9f-45bb-8029-a1ac5d0b892b"
+      "id": "30dd97d2-a9b0-4bb2-a9c6-8b4c05ad9f15"
     },
     {
       "parameters": {
-        "httpMethod": "POST",
-        "path": "gdpr-compliance",
-        "responseMode": "responseNode",
-        "options": {
-          "rawBody": true
-        }
+        "jsCode": "// 🧩 Chuẩn hóa dữ liệu đầu vào cho kiểm tra GDPR\n// Hỗ trợ nhiều cấu trúc dữ liệu: document analyzer response, direct webhook, Google Drive trigger\nconst input = $json ?? {};\nconst body = input.body ?? {};\n\n// 🔍 Debug: Log input structure\nconsole.log('📥 Input structure:', JSON.stringify(input, null, 2).substring(0, 500));\n\n// 🔍 Parse webhook response từ document analyzer (cấu trúc mới)\nlet webhookData = null;\nlet processingId = null;\nlet cloudinaryUrl = null;\nlet fileUrl = null;\nlet fileName = null;\nlet userId = null;\nlet department = null;\nlet analysisResults = null;\nlet fileSize = null;\nlet mimeType = null;\nlet fileId = null;\n\n// ============================================\n// CASE 1: Document Analyzer Response (có success, processingId, data)\n// ============================================\nif (input.success !== undefined || body.success !== undefined) {\n  const response = input.success !== undefined ? input : body;\n  \n  // Lấy processingId\n  processingId = response.processingId || response.data?.processing_id || response.processing_id || null;\n  \n  // Lấy thông tin file từ data object\n  if (response.data) {\n    fileUrl = response.data.file_url || null;\n    cloudinaryUrl = response.data.cloudinary_url || response.data.file_url || null;\n    fileName = response.data.file_name || null;\n    userId = response.data.user_id || null;\n    department = response.data.department || null;\n    analysisResults = response.data.analysis_results || null;\n  }\n  \n  webhookData = response;\n  console.log('✅ Parsed webhook response from document analyzer');\n  console.log('   Processing ID:', processingId);\n  console.log('   Cloudinary URL:', cloudinaryUrl);\n  console.log('   File Name:', fileName);\n}\n\n// ============================================\n// CASE 2: Direct webhook với body.file (từ hình ảnh)\n// ============================================\n// Luôn kiểm tra body.file nếu có, hoặc nếu chưa có processingId và cloudinaryUrl\nif (body.file || (!processingId && !cloudinaryUrl)) {\n  // Lấy từ body.file (nếu có)\n  if (body.file) {\n    fileName = fileName || body.file.name || null;\n    fileSize = body.file.size || null;\n    mimeType = body.file.mimeType || body.file.mime_type || null;\n    // QUAN TRỌNG: Lấy cloudinary_url từ body.file\n    cloudinaryUrl = cloudinaryUrl || body.file.cloudinary_url || body.file.url || body.file.cloudinaryUrl || null;\n    fileUrl = fileUrl || cloudinaryUrl || null;\n    console.log('✅ Found file info in body.file');\n    console.log('   File Name:', fileName);\n    console.log('   File Size:', fileSize);\n    console.log('   MIME Type:', mimeType);\n    console.log('   Cloudinary URL:', cloudinaryUrl);\n  }\n  \n  // Lấy processingId từ nhiều nguồn\n  processingId = processingId || \n    input.processingId || \n    body.processingId || \n    input.processing_id || \n    body.processing_id || \n    null;\n  \n  // Lấy cloudinary_url từ nhiều nguồn\n  cloudinaryUrl = cloudinaryUrl || \n    input.cloudinary_url || \n    body.cloudinary_url || \n    input.cloudinaryUrl || \n    body.cloudinaryUrl || \n    input.file_url || \n    body.file_url || \n    null;\n  \n  // Lấy file_url\n  fileUrl = fileUrl || cloudinaryUrl || null;\n  \n  // Lấy user_id\n  userId = userId || \n    input.user_id || \n    body.user_id || \n    input.userId || \n    body.userId || \n    null;\n  \n  // Lấy department\n  department = department || \n    input.department || \n    body.department || \n    null;\n  \n  // Lấy analysis_results\n  analysisResults = analysisResults || \n    input.analysis_results || \n    body.analysis_results || \n    null;\n}\n\n// ============================================\n// CASE 3: Google Drive Trigger (fallback)\n// ============================================\nif (!fileUrl && !cloudinaryUrl) {\n  try {\n    fileId = input.id || body.id || null;\n    fileName = fileName || input.name || body.name || null;\n    fileSize = fileSize || input.size || body.size || null;\n    mimeType = mimeType || input.mimeType || body.mimeType || null;\n    \n    // Tạo URL Google Drive\n    if (fileId) {\n      fileUrl = `https://drive.google.com/file/d/${fileId}/view`;\n      console.log('✅ Using Google Drive file info');\n    }\n  } catch (e) {\n    console.warn('⚠️ Lỗi khi xử lý thông tin Google Drive:', e.message);\n  }\n}\n\n// 🔍 Thử lấy email của chủ sở hữu từ output Google Drive Trigger (fallback)\nlet ownerEmail = null;\ntry {\n  ownerEmail =\n    input.owners?.[0]?.emailAddress ||\n    body.owners?.[0]?.emailAddress ||\n    input.lastModifyingUser?.emailAddress ||\n    userId || // Dùng user_id từ webhook nếu có\n    null;\n} catch (e) {\n  ownerEmail = null;\n}\n\n// 🧱 Format file size nếu có\nlet formattedFileSize = '1.0MB';\nif (fileSize) {\n  if (typeof fileSize === 'number') {\n    // Convert bytes to readable format\n    if (fileSize < 1024) {\n      formattedFileSize = `${fileSize}B`;\n    } else if (fileSize < 1024 * 1024) {\n      formattedFileSize = `${(fileSize / 1024).toFixed(2)}KB`;\n    } else {\n      formattedFileSize = `${(fileSize / (1024 * 1024)).toFixed(2)}MB`;\n    }\n  } else {\n    formattedFileSize = fileSize.toString();\n  }\n}\n\n// 🧱 Dữ liệu mẫu (fallback khi thiếu input)\nconst defaultData = {\n  documentTitle: fileName || 'Tài liệu mẫu - GDPR Check',\n  documentCategory: 'Nhân sự',\n  documentSummary: analysisResults?.data?.[0]?.document_summary?.output?.[0]?.content || \n                   analysisResults?.document_summary || \n                   'Tài liệu chứa dữ liệu cá nhân cần kiểm tra GDPR',\n  originalFileId: processingId || fileId || 'sample_file_gdpr',\n  fileSize: formattedFileSize,\n  uploadDate: new Date().toISOString(),\n  uploader: ownerEmail || userId || 'privacy@company.com',\n  hasPersonalInfo: true,\n  containsSpecialCategoryData: false,\n  dataSubjectRequest: null,\n  legalBasis: null\n};\n\n// 🧠 Gộp dữ liệu: Ưu tiên parsed values → input → body → mặc định\nconst merged = {\n  documentTitle: fileName || input.documentTitle || body.documentTitle || defaultData.documentTitle,\n  documentCategory: input.documentCategory || body.documentCategory || defaultData.documentCategory,\n  documentSummary: input.documentSummary || body.documentSummary || defaultData.documentSummary,\n  originalFileId: processingId || fileId || input.originalFileId || body.originalFileId || defaultData.originalFileId,\n  fileSize: formattedFileSize || input.fileSize || body.fileSize || defaultData.fileSize,\n  uploadDate: input.uploadDate || body.uploadDate || defaultData.uploadDate,\n  uploader: ownerEmail || userId || input.uploader || body.uploader || defaultData.uploader,\n  hasPersonalInfo: input.hasPersonalInfo ?? body.hasPersonalInfo ?? defaultData.hasPersonalInfo,\n  containsSpecialCategoryData: input.containsSpecialCategoryData ?? body.containsSpecialCategoryData ?? defaultData.containsSpecialCategoryData,\n  dataSubjectRequest: input.dataSubjectRequest ?? body.dataSubjectRequest ?? defaultData.dataSubjectRequest,\n  legalBasis: input.legalBasis ?? body.legalBasis ?? defaultData.legalBasis\n};\n\n// 🧾 Thêm metadata hệ thống và thông tin file\nconst result = {\n  receivedAt: new Date().toISOString(),\n  workflowSource: 'gdpr-compliance',\n  processingTimestamp: new Date().toISOString(),\n  // 🔗 Thông tin file từ Cloudinary/webhook\n  fileUrl: fileUrl || cloudinaryUrl || null,\n  cloudinaryUrl: cloudinaryUrl || fileUrl || null, // Cloudinary URL để download\n  fileId: fileId || processingId || null,\n  fileName: fileName || null,\n  mimeType: mimeType || null,\n  processingId: processingId || null, // Processing ID từ document analyzer\n  userId: userId || null,\n  department: department || null,\n  analysisResults: analysisResults || null, // Kết quả phân tích từ document analyzer\n  // 📊 Thông tin Google Drive gốc (nếu có)\n  googleDriveInfo: fileId ? {\n    id: fileId,\n    name: fileName,\n    size: fileSize,\n    mimeType: mimeType,\n    url: fileUrl,\n    owners: input.owners || body.owners || null,\n    lastModifyingUser: input.lastModifyingUser || body.lastModifyingUser || null\n  } : null,\n  // 📋 Webhook data gốc (nếu có)\n  webhookData: webhookData || (Object.keys(input).length > 0 ? input : null),\n  ...merged\n};\n\n// 🔍 Debug: Log kết quả cuối cùng\nconsole.log('✅ Normalized data result:');\nconsole.log('   Processing ID:', result.processingId);\nconsole.log('   File Name:', result.fileName);\nconsole.log('   Cloudinary URL:', result.cloudinaryUrl);\nconsole.log('   File URL:', result.fileUrl);\nconsole.log('   User ID:', result.userId);\nconsole.log('   MIME Type:', result.mimeType);\n\n// 🧹 Dọn undefined/null\nfor (const key in result) {\n  if (result[key] === undefined) result[key] = null;\n  if (typeof result[key] === 'string') result[key] = result[key].trim();\n}\n\n// ✅ Trả ra JSON hoàn chỉnh\nreturn [{ json: result }];\n"
       },
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2.1,
-      "position": [
-        -1760,
-        -96
-      ],
-      "id": "webhook-flow2-gdpr",
-      "name": "1️⃣ Webhook - Nhận processingId",
-      "webhookId": "gdpr-compliance-webhook-flow2"
-    },
-    {
-      "parameters": {
-        "method": "GET",
-        "url": "={{ $json.api_url || `https://api.aidocmanageagent.io.vn/api/document/get-from-postgres/${$json.processingId || $json.processing_id}` }}",
-        "options": {
-          "timeout": 30000,
-          "retry": {
-            "enabled": true,
-            "maxRetries": 3,
-            "retryDelay": 2000
-          }
-        }
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        -1560,
-        -96
-      ],
-      "id": "get-data-from-api-flow2",
-      "name": "2️⃣ Get Data from API"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Extract và format dữ liệu từ API response cho Flow 2 (GDPR)\nconst apiResponse = $json || {};\nconst documentData = apiResponse.data || {};\n\n// Validate dữ liệu\nif (!documentData.processing_id) {\n  console.error('❌ Invalid API response: missing processing_id');\n  throw new Error('Invalid API response: missing processing_id');\n}\n\n// Extract analysis results\nconst analysisResults = documentData.analysis_results || {};\n\n// Format dữ liệu cho Flow 2 (GDPR Compliance)\nconst formattedData = {\n  // Thông tin document\n  processingId: documentData.processing_id,\n  file_name: documentData.file_name || 'Unknown Document',\n  file_url: documentData.file_url || documentData.cloudinary_url || '',\n  cloudinary_url: documentData.cloudinary_url || documentData.file_url || '',\n  \n  // Thông tin user\n  user_id: documentData.user_id || '',\n  department: documentData.department || '',\n  uploader: documentData.user_id || 'unknown@example.com',\n  \n  // Analysis results từ Flow 1 (quan trọng cho GDPR)\n  analysis_results: analysisResults,\n  \n  // Metadata\n  status: documentData.status || 'completed',\n  created_at: documentData.created_at || '',\n  analysis_completed_at: documentData.analysis_completed_at || '',\n  \n  // Fields cho logic GDPR\n  documentTitle: documentData.file_name || 'Tài liệu cần kiểm tra GDPR',\n  documentCategory: documentData.department || 'Chung',\n  documentSummary: analysisResults.main_theme || 'Tài liệu chứa dữ liệu cá nhân',\n  hasPersonalInfo: true, // Có thể check từ analysis_results\n  containsSpecialCategoryData: false, // Có thể check từ analysis_results\n  uploadDate: documentData.created_at || new Date().toISOString(),\n  fileSize: 'Unknown',\n  workflowSource: 'flow1-api',\n  \n  // Thông tin file\n  fileUrl: documentData.file_url || documentData.cloudinary_url || '',\n  fileName: documentData.file_name || 'Unknown Document',\n  fileId: documentData.processing_id,\n  originalFileId: documentData.processing_id,\n  \n  // Metadata hệ thống\n  receivedAt: new Date().toISOString(),\n  processingTimestamp: new Date().toISOString(),\n  \n  // GDPR fields\n  dataSubjectRequest: null,\n  legalBasis: null\n};\n\nconsole.log('📊 Formatted data for Flow 2 (GDPR):', JSON.stringify(formattedData, null, 2));\n\nreturn [{ json: formattedData }];"
-      },
+      "name": "2️⃣ Chuẩn hóa dữ liệu đầu vào",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1360,
-        -96
+        400,
+        352
       ],
-      "id": "89959532-8edf-49f1-9f14-fbd6764a3dda",
-      "name": "3️⃣ Format Data for GDPR"
+      "id": "816fb97b-17b0-49d9-a68f-e203912d7be7"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.cloudinaryUrl || $json.fileUrl }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "name": "2.5️⃣ Download File từ Cloudinary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        352
+      ],
+      "id": "download-cloudinary-file",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// 🔗 Merge file binary data với JSON data từ normalization node\n// Lấy dữ liệu từ normalization node (node đầu tiên trong input chain)\nlet normalizedData = {};\ntry {\n  // Thử lấy từ node normalization trực tiếp\n  normalizedData = $('2️⃣ Chuẩn hóa dữ liệu đầu vào').item.json || {};\n} catch (e) {\n  // Fallback: lấy từ input items\n  const inputItems = $input.all();\n  if (inputItems.length > 0) {\n    normalizedData = inputItems[0].json || {};\n  }\n  // Nếu vẫn không có, dùng $json hiện tại\n  if (Object.keys(normalizedData).length === 0) {\n    normalizedData = $json || {};\n  }\n}\n\n// Lấy binary data từ HTTP Request (file download)\nconst binaryData = $binary?.data || null;\n\n// Merge dữ liệu - giữ nguyên tất cả data từ normalization\nconst result = {\n  ...normalizedData,\n  // Thông tin file đã download\n  fileDownloaded: !!binaryData,\n  fileDownloadTimestamp: binaryData ? new Date().toISOString() : null,\n  downloadStatus: binaryData ? 'success' : 'failed',\n  // Binary data sẽ được tự động pass qua n8n\n  // Có thể access qua $binary trong các node tiếp theo\n};\n\nconsole.log('✅ File downloaded from Cloudinary:', result.cloudinaryUrl);\nconsole.log('   File binary available:', !!binaryData);\nconsole.log('   File name:', result.fileName);\nconsole.log('   Processing ID:', result.processingId);\n\n// Trả về với binary data (nếu có)\nif (binaryData) {\n  return [{ json: result, binary: $binary }];\n} else {\n  return [{ json: result }];\n}\n"
+      },
+      "name": "2.6️⃣ Merge File Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        352
+      ],
+      "id": "merge-file-data"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 📋 Chuẩn bị prompt chi tiết với tất cả data đã chuẩn hóa cho Gemini\nconst data = $json;\nconst binaryData = $binary?.data || null;\n\n// Kiểm tra có file PDF không\nif (!binaryData) {\n  console.warn('⚠️ Không có file PDF binary data!');\n}\n\n// Tạo prompt chi tiết với tất cả thông tin\nconst prompt = `Bạn là một chuyên gia phân tích tuân thủ GDPR (General Data Protection Regulation).\n\nNHIỆM VỤ: Phân tích tài liệu PDF đính kèm và đưa ra quyết định GDPR phù hợp.\n\nTHÔNG TIN TÀI LIỆU:\n- Tên file: ${data.fileName || 'Không xác định'}\n- Processing ID: ${data.processingId || 'Không có'}\n- Người upload: ${data.uploader || 'Không xác định'}\n- User ID: ${data.userId || 'Không có'}\n- Phòng ban: ${data.department || 'Không có'}\n- Kích thước file: ${data.fileSize || 'Không xác định'}\n- MIME Type: ${data.mimeType || 'Không xác định'}\n- URL file: ${data.cloudinaryUrl || data.fileUrl || 'Không có'}\n\n${data.analysisResults ? `\nKẾT QUẢ PHÂN TÍCH TRƯỚC ĐÓ (nếu có):\n${JSON.stringify(data.analysisResults, null, 2)}\n` : ''}\n\nYÊU CẦU PHÂN TÍCH:\n1. Đọc và phân tích toàn bộ nội dung tài liệu PDF đính kèm\n2. Xác định các loại dữ liệu cá nhân (PII) có trong tài liệu:\n   - Tên, địa chỉ, số điện thoại, email\n   - Số CMND/CCCD, passport\n   - Thông tin tài chính (số tài khoản, thẻ tín dụng)\n   - Thông tin y tế\n   - Dữ liệu sinh trắc học\n   - Dữ liệu nhạy cảm khác\n3. Đánh giá mức độ nhạy cảm của dữ liệu (cao/trung bình/thấp)\n4. Xác định khối lượng dữ liệu (high/medium/low)\n5. Xác định cơ sở pháp lý (legal basis) cho việc xử lý dữ liệu:\n   - consent (đồng ý)\n   - contract (hợp đồng)\n   - legal obligation (nghĩa vụ pháp lý)\n   - vital interests (lợi ích quan trọng)\n   - public task (nhiệm vụ công)\n   - legitimate interests (lợi ích hợp pháp)\n6. Đưa ra quyết định GDPR:\n   - \"delete\": Xóa tài liệu nếu vi phạm nghiêm trọng GDPR\n   - \"anonymize\": Ẩn danh hóa dữ liệu cá nhân\n   - \"allow\": Cho phép lưu trữ nếu tuân thủ GDPR\n7. Xác định các trường cần redact (ẩn danh hóa) nếu quyết định là \"anonymize\"\n8. Xác định thời gian lưu trữ (retention days)\n9. Xác định có cần thông báo DPO (Data Protection Officer) không\n\nĐỊNH DẠNG OUTPUT (JSON):\n{\n  \"content\": {\n    \"gdprDecision\": \"delete|anonymize|allow\",\n    \"notifyDPO\": true/false,\n    \"legalBasis\": \"consent|contract|legal_obligation|vital_interests|public_task|legitimate_interests|null\",\n    \"retentionDays\": số_ngày,\n    \"redactionFields\": [\"danh_sách_các_trường_cần_ẩn\"],\n    \"gdprJustification\": \"Lý do chi tiết cho quyết định\",\n    \"fileUrl\": \"${data.fileUrl || ''}\",\n    \"fileName\": \"${data.fileName || ''}\",\n    \"personalDataFound\": [\"danh_sách_dữ_liệu_cá_nhân_tìm_thấy\"],\n    \"sensitiveDataDetected\": true/false,\n    \"dataVolume\": \"high|medium|low\"\n  },\n  \"finishReason\": \"stop\",\n  \"index\": 0,\n  \"uploader\": \"${data.uploader || ''}\"\n}\n\nQUAN TRỌNG:\n- Phân tích kỹ lưỡng nội dung PDF\n- Đưa ra quyết định dựa trên các nguyên tắc GDPR\n- Giải thích rõ ràng lý do cho quyết định\n- Trả về JSON đúng định dạng`;\n\n// Lưu prompt vào result\nconst result = {\n  ...data,\n  gdprPrompt: prompt,\n  hasPdfBinary: !!binaryData\n};\n\nconsole.log('✅ Đã chuẩn bị prompt cho GDPR analysis');\nconsole.log('   Has PDF binary:', !!binaryData);\nconsole.log('   File name:', data.fileName);\n\n// Trả về với binary data (nếu có) để Gemini có thể đọc file PDF\nif (binaryData) {\n  return [{ json: result, binary: $binary }];\n} else {\n  return [{ json: result }];\n}"
+      },
+      "name": "2.7️⃣ Chuẩn bị Prompt GDPR",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        352
+      ],
+      "id": "prepare-gdpr-prompt"
     },
     {
       "parameters": {
@@ -77,17 +83,17 @@
           "mode": "list",
           "cachedResultName": "models/gemini-2.5-flash"
         },
-        "text": "=Phân tích GDPR. Quyết định: delete|anonymize|allow.\n\n{\n  \"content\": {\n    \"gdprDecision\": \"delete|anonymize|allow\",\n    \"notifyDPO\": true,\n    \"legalBasis\": \"consent|contract|null\",\n    \"retentionDays\": 30,\n    \"redactionFields\": [],\n    \"gdprJustification\": \"Lý do\",\n    \"fileUrl\": \"{{ $json.fileUrl }}\",\n    \"fileName\": \"{{ $json.fileName }}\",\n    \"personalDataFound\": [],\n    \"sensitiveDataDetected\": false,\n    \"dataVolume\": \"high|medium|low\"\n  },\n  \"finishReason\": \"stop\",\n  \"index\": 0,\n  \"uploader\": {{ $json.uploader }}\n}",
+        "text": "={{ $json.gdprPrompt }}",
         "options": {}
       },
       "name": "3️⃣ AI GDPR Decision",
       "type": "@n8n/n8n-nodes-langchain.googleGemini",
       "typeVersion": 1,
       "position": [
-        -1152,
-        -96
+        800,
+        352
       ],
-      "id": "3b5d4957-2fdb-4e3c-95a1-98864c580347",
+      "id": "b59e4065-efe8-4432-b558-e6513fac2cb7",
       "credentials": {
         "googlePalmApi": {
           "id": "91898OzbZbpGF2b2",
@@ -103,10 +109,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -960,
-        -96
+        1000,
+        352
       ],
-      "id": "e349f3ff-5cdb-42c3-b7ea-3008883cf033"
+      "id": "a711b63b-068c-49b5-acc8-7cc220df4046"
     },
     {
       "parameters": {
@@ -132,14 +138,14 @@
         },
         "options": {}
       },
-      "name": "5️⃣ Hành động: Delete ?",
+      "name": "5️⃣ Hành động: Delete?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -768,
-        -224
+        1092,
+        224
       ],
-      "id": "16570a87-fbdb-4d81-962c-2451736c9e79"
+      "id": "c43814e9-dbe3-4492-82b2-8ebe00e4dd51"
     },
     {
       "parameters": {
@@ -165,14 +171,14 @@
         },
         "options": {}
       },
-      "name": "6️⃣ Hành động: Anonymize ?",
+      "name": "6️⃣ Hành động: Anonymize?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -768,
-        -64
+        1092,
+        384
       ],
-      "id": "6946f8f6-9367-4c47-9273-486a57d54b73"
+      "id": "9cfeec8f-5ee5-4b3a-a22d-72440c4cd960"
     },
     {
       "parameters": {
@@ -182,10 +188,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -576,
-        -304
+        1184,
+        144
       ],
-      "id": "28124028-d9fc-48bd-9b15-3e823153e526"
+      "id": "29264876-faa8-469f-8c84-b8784b2e3575"
     },
     {
       "parameters": {
@@ -195,10 +201,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -576,
-        -64
+        1184,
+        384
       ],
-      "id": "cc8da31e-6341-4aad-9983-0b582482166a"
+      "id": "b0104c72-e463-4d14-8646-1fc7c46e51a3"
     },
     {
       "parameters": {
@@ -208,10 +214,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -576,
-        128
+        1184,
+        576
       ],
-      "id": "d9cdd524-7505-4c82-8852-6fe138479bab"
+      "id": "5fb7aec3-b461-4013-9cda-1023242ae74f"
     },
     {
       "parameters": {},
@@ -219,261 +225,218 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 1,
       "position": [
-        -400,
-        -288
+        1360,
+        160
       ],
-      "id": "a9fdb4c3-b871-453d-950b-04c003ebafda"
+      "id": "e0a4ba1f-10dc-44f1-a31b-5657a115d28e"
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 1
-          },
-          "conditions": [
-            {
-              "id": "condition1",
-              "leftValue": "={{ $json.notifyDPO }}",
-              "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "equal"
-              }
-            },
-            {
-              "id": "f37a3bfe-bcfc-4d92-b65b-c672411cf81e",
-              "leftValue": "={{ $json.notifyDPO }}",
-              "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "equals"
-              }
-            }
-          ],
-          "combinator": "or"
-        },
-        "options": {}
+        "jsCode": "// 🔧 Format dữ liệu cho PostgreSQL INSERT\n// Lấy dữ liệu từ node trước\nconst data = $json;\n\n// Helper function để escape SQL strings\nfunction escapeSQL(str) {\n  if (!str) return null;\n  return String(str).replace(/'/g, \"''\").replace(/\\\\/g, '\\\\\\\\');\n}\n\n// Helper function để format PostgreSQL array\nfunction formatPostgresArray(arr) {\n  if (!Array.isArray(arr) || arr.length === 0) return 'ARRAY[]::TEXT[]';\n  const escaped = arr.map(item => `'${escapeSQL(String(item))}'`).join(', ');\n  return `ARRAY[${escaped}]`;\n}\n\n// Format JSONB cho analysis_results\nlet analysisResultsJSON = 'NULL';\nif (data.analysis_results || data.analysisResults) {\n  try {\n    const jsonStr = JSON.stringify(data.analysis_results || data.analysisResults);\n    analysisResultsJSON = `'${escapeSQL(jsonStr)}'::jsonb`;\n  } catch (e) {\n    console.warn('⚠️ Lỗi khi format analysis_results:', e.message);\n    analysisResultsJSON = 'NULL';\n  }\n}\n\n// Format các giá trị\nconst result = {\n  ...data,\n  // Format arrays cho PostgreSQL\n  redaction_fields_sql: formatPostgresArray(data.redaction_fields || data.redactionFields || []),\n  personal_data_found_sql: formatPostgresArray(data.personal_data_found || data.personalDataFound || []),\n  // Format JSONB\n  analysis_results_sql: analysisResultsJSON,\n  // Format text fields (escape quotes)\n  gdpr_justification_sql: data.gdpr_justification || data.gdprJustification ? `'${escapeSQL(data.gdpr_justification || data.gdprJustification)}'` : 'NULL',\n  legal_basis_sql: data.legal_basis || data.legalBasis ? `'${escapeSQL(data.legal_basis || data.legalBasis)}'` : 'NULL',\n  data_volume_sql: data.data_volume || data.dataVolume ? `'${escapeSQL(data.data_volume || data.dataVolume)}'` : 'NULL',\n  gdpr_action_performed_sql: data.gdpr_action_performed || data.gdprActionPerformed ? `'${escapeSQL(data.gdpr_action_performed || data.gdprActionPerformed)}'` : 'NULL',\n  // Format timestamps\n  ai_decision_timestamp_sql: data.ai_decision_timestamp || data.aiDecisionTimestamp ? `'${data.ai_decision_timestamp || data.aiDecisionTimestamp}'::timestamp` : 'NULL',\n  gdpr_completed_at_sql: data.gdpr_completed_at || data.gdprCompletedAt ? `'${data.gdpr_completed_at || data.gdprCompletedAt}'::timestamp` : 'NOW()::timestamp'\n};\n\nconsole.log('✅ Đã format dữ liệu cho PostgreSQL INSERT');\n\nreturn [{ json: result }];"
       },
-      "name": "8️⃣ Cần thông báo DPO ?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        -208,
-        -96
-      ],
-      "id": "e4b64e9b-b6cd-43da-8d4d-2e57c374134f"
-    },
-    {
-      "parameters": {
-        "sendTo": "tranhaduy204@gmail.com",
-        "subject": "=🔐 GDPR Alert: {{ $json.gdprDecision?.toUpperCase() || 'UNKNOWN' }} file requires immediate attention",
-        "emailType": "text",
-        "message": "=Kính chào DPO,\n\nHệ thống AI GDPR Compliance Agent đã phát hiện một tài liệu vi phạm quy định GDPR và cần sự can thiệp ngay lập tức.\n\n**Thông tin tài liệu:**\n- Tên file: {{ $json.fileName || 'Không xác định' }}\n- URL file: {{ $json.fileUrl || 'Không có URL' }}\n- Uploader: {{ $json.uploader || 'Không xác định' }}\n- Quyết định xử lý: {{ $json.gdprDecision || 'Không xác định' }}\n- Thông báo DPO: {{ $json.notifyDPO || 'Không' }}\n- Cơ sở pháp lý: {{ $json.legalBasis || 'Không có' }}\n\n**🔍 Phân tích nội dung file:**\n- Dữ liệu cá nhân tìm thấy: {{ $json.personalDataFound && $json.personalDataFound.length > 0 ? $json.personalDataFound.join(', ') : 'Không có' }}\n- Dữ liệu nhạy cảm: {{ $json.sensitiveDataDetected ? 'Có' : 'Không' }}\n- Khối lượng dữ liệu: {{ $json.dataVolume || 'Không xác định' }}\n- Các trường cần redact: {{ $json.redactionFields && $json.redactionFields.length > 0 ? $json.redactionFields.join(', ') : 'Không có' }}\n\n**Lý do quyết định:**\n{{ $json.gdprJustification || 'Không có lý do cụ thể được cung cấp.' }}\n\n**Thời điểm ra quyết định:** {{ $json.aiDecisionTimestamp || (new Date()).toISOString() }}\n\n**Hành động khuyến nghị:**\n- Xem xét và xác nhận quyết định của AI\n- Liên hệ với uploader để làm rõ mục đích sử dụng dữ liệu\n- Thực hiện các biện pháp khắc phục cần thiết\n- Cập nhật chính sách bảo mật nếu cần\n\nTrân trọng,\n**AI GDPR Compliance Agent**",
-        "options": {}
-      },
-      "name": "9️⃣ Gửi email DPO",
-      "type": "n8n-nodes-base.gmail",
-      "typeVersion": 2,
-      "position": [
-        -16,
-        -192
-      ],
-      "id": "ee01bb5c-0a72-4e66-8acc-83b4f8916d1e",
-      "webhookId": "02bbf782-9357-4ea4-b78e-664aaad97422",
-      "credentials": {
-        "gmailOAuth2": {
-          "id": "LTZtTwz14XXGyrdz",
-          "name": "Gmail account 2"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "sendTo": "={{ $json.uploader || 'dangnguyen0175@gmail.com' }}",
-        "subject": "=📣 GDPR Result: {{ $json.gdprDecision?.toUpperCase() || 'UNKNOWN' }}",
-        "emailType": "text",
-        "message": "=Kính chào bạn,\n\nHệ thống AI GDPR Compliance Agent đã hoàn tất việc kiểm tra tuân thủ GDPR cho tài liệu của bạn.\n\n**Thông tin tài liệu:**\n- Tên file: {{ $json.fileName || 'Không xác định' }}\n- URL file: {{ $json.fileUrl || 'Không có URL' }}\n\n**🔍 Kết quả phân tích nội dung:**\n- Dữ liệu cá nhân tìm thấy: {{ $json.personalDataFound && $json.personalDataFound.length > 0 ? $json.personalDataFound.join(', ') : 'Không có' }}\n- Dữ liệu nhạy cảm: {{ $json.sensitiveDataDetected ? 'Có' : 'Không' }}\n- Khối lượng dữ liệu: {{ $json.dataVolume || 'Không xác định' }}\n\n**Kết quả quyết định:**\n- Quyết định xử lý: {{ $json.gdprDecision || 'Không xác định' }}\n- Thông báo DPO: {{ $json.notifyDPO || 'Không' }}\n- Cơ sở pháp lý: {{ $json.legalBasis || 'Không có' }}\n- Các trường cần redact: {{ $json.redactionFields && $json.redactionFields.length > 0 ? $json.redactionFields.join(', ') : 'Không có' }}\n\n**Lý do quyết định:**\n{{ $json.gdprJustification || 'Không có lý do được cung cấp.' }}\n\n**Thời điểm ra quyết định:** {{ $json.aiDecisionTimestamp || (new Date()).toISOString() }}\n\nNếu bạn có bất kỳ thắc mắc nào về kết quả này, vui lòng liên hệ với bộ phận bảo mật dữ liệu (DPO) để được hỗ trợ.\n\nTrân trọng,\n**AI GDPR Compliance Agent**",
-        "options": {}
-      },
-      "name": "1️⃣0️⃣ Thông báo kết quả cho uploader",
-      "type": "n8n-nodes-base.gmail",
-      "typeVersion": 2,
-      "position": [
-        176,
-        -96
-      ],
-      "id": "b24105fd-5a3e-4876-8840-a008514fb57c",
-      "webhookId": "62b2fab2-9f29-4f76-9c77-89e5acbbdf61",
-      "credentials": {
-        "gmailOAuth2": {
-          "id": "LTZtTwz14XXGyrdz",
-          "name": "Gmail account 2"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "operation": "append",
-        "documentId": {
-          "__rl": true,
-          "value": "16eU4No0bLeMYCxjo0586358kzjuBrrf52fRo_n7SDFg",
-          "mode": "list",
-          "cachedResultName": "Log GDPR",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/16eU4No0bLeMYCxjo0586358kzjuBrrf52fRo_n7SDFg/edit?usp=drivesdk"
-        },
-        "sheetName": {
-          "__rl": true,
-          "value": "gid=0",
-          "mode": "list",
-          "cachedResultName": "Trang tính1",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/16eU4No0bLeMYCxjo0586358kzjuBrrf52fRo_n7SDFg/edit#gid=0"
-        },
-        "columns": {
-          "mappingMode": "autoMapInputData",
-          "value": {},
-          "matchingColumns": [
-            "id"
-          ],
-          "schema": [
-            {
-              "id": "id",
-              "displayName": "id",
-              "required": false,
-              "defaultMatch": true,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "threadId",
-              "displayName": "threadId",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "labelIds",
-              "displayName": "labelIds",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": false
-        },
-        "options": {}
-      },
-      "name": "1️⃣1️⃣ Ghi log GDPR vào Sheets",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4,
-      "position": [
-        368,
-        -96
-      ],
-      "id": "3163359c-2a13-4298-9ed5-f35350b121d6",
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "cmWSNW94QNgr3T8o",
-          "name": "Google Sheets account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Audit Trail GDPR\nreturn { json: { auditId: `gdpr_${Date.now()}`, timestamp: new Date().toISOString(), ...$json } };"
-      },
-      "name": "1️⃣2️⃣ Tạo Audit Trail GDPR",
+      "name": "1️⃣1️⃣.5️⃣ Format Data cho PostgreSQL",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        560,
-        -96
+        2000,
+        352
       ],
-      "id": "aac785df-4161-45aa-a842-0a3facdbedd9"
+      "id": "format-data-for-postgres"
     },
     {
       "parameters": {
-        "jsCode": "// 🔍 DEBUG: Kiểm tra dữ liệu trước khi gửi email\nconsole.log('🔍 DEBUG - Dữ liệu trước email:');\nconsole.log('gdprDecision:', $json.gdprDecision);\nconsole.log('notifyDPO:', $json.notifyDPO);\nconsole.log('uploader:', $json.uploader);\nconsole.log('Full data:', JSON.stringify($json, null, 2));\n\n// 🧹 Đảm bảo có dữ liệu cần thiết\nconst result = {\n  ...$json,\n  // Đảm bảo có gdprDecision\n  gdprDecision: $json.gdprDecision || 'UNKNOWN',\n  // Đảm bảo có notifyDPO\n  notifyDPO: $json.notifyDPO || false,\n  // Đảm bảo có uploader\n  uploader: $json.uploader || 'dangnguyen0175@gmail.com',\n  // Đảm bảo có justification\n  gdprJustification: $json.gdprJustification || 'Không có lý do được cung cấp.',\n  // Thêm timestamp\n  aiDecisionTimestamp: $json.aiDecisionTimestamp || new Date().toISOString()\n};\n\nconsole.log('✅ DEBUG - Dữ liệu sau xử lý:', result);\nreturn [{ json: result }];"
+        "operation": "executeQuery",
+        "query": "=INSERT INTO gdpr_compliance_results (\n  processing_id, audit_id, file_name, file_url, cloudinary_url, user_id, department, uploader,\n  analysis_results, gdpr_decision, gdpr_justification, legal_basis, retention_days,\n  redaction_fields, personal_data_found, sensitive_data_detected, data_volume, notify_dpo,\n  status, gdpr_action_performed, ai_decision_timestamp, gdpr_completed_at, workflow_source, flow2_completed\n) VALUES (\n  '{{ $json.processing_id }}',\n  {{ $json.auditId || $json.audit_id ? `'${$json.auditId || $json.audit_id}'` : 'NULL' }},\n  {{ $json.file_name || $json.fileName ? `'${$json.file_name || $json.fileName}'` : 'NULL' }},\n  {{ $json.file_url || $json.fileUrl ? `'${$json.file_url || $json.fileUrl}'` : 'NULL' }},\n  {{ $json.cloudinary_url || $json.cloudinaryUrl ? `'${$json.cloudinary_url || $json.cloudinaryUrl}'` : 'NULL' }},\n  {{ $json.user_id || $json.userId ? `'${$json.user_id || $json.userId}'` : 'NULL' }},\n  {{ $json.department ? `'${$json.department}'` : 'NULL' }},\n  {{ $json.uploader ? `'${$json.uploader}'` : 'NULL' }},\n  {{ $json.analysis_results_sql }},\n  {{ $json.gdpr_decision || $json.gdprDecision ? `'${$json.gdpr_decision || $json.gdprDecision}'` : 'NULL' }},\n  {{ $json.gdpr_justification_sql }},\n  {{ $json.legal_basis_sql }},\n  {{ $json.retention_days || $json.retentionDays || 30 }},\n  {{ $json.redaction_fields_sql }},\n  {{ $json.personal_data_found_sql }},\n  {{ $json.sensitive_data_detected !== undefined ? $json.sensitive_data_detected : ($json.sensitiveDataDetected !== undefined ? $json.sensitiveDataDetected : false) }},\n  {{ $json.data_volume_sql }},\n  {{ $json.notify_dpo !== undefined ? $json.notify_dpo : ($json.notifyDPO !== undefined ? $json.notifyDPO : false) }},\n  '{{ $json.status || 'gdpr_completed' }}',\n  {{ $json.gdpr_action_performed_sql }},\n  {{ $json.ai_decision_timestamp_sql }},\n  {{ $json.gdpr_completed_at_sql }},\n  '{{ $json.workflow_source || 'flow2-gdpr-compliance' }}',\n  {{ $json.flow2_completed !== undefined ? $json.flow2_completed : true }}\n) ON CONFLICT (processing_id) DO UPDATE SET\n  audit_id = EXCLUDED.audit_id,\n  file_name = EXCLUDED.file_name,\n  file_url = EXCLUDED.file_url,\n  cloudinary_url = EXCLUDED.cloudinary_url,\n  user_id = EXCLUDED.user_id,\n  department = EXCLUDED.department,\n  uploader = EXCLUDED.uploader,\n  analysis_results = EXCLUDED.analysis_results,\n  gdpr_decision = EXCLUDED.gdpr_decision,\n  gdpr_justification = EXCLUDED.gdpr_justification,\n  legal_basis = EXCLUDED.legal_basis,\n  retention_days = EXCLUDED.retention_days,\n  redaction_fields = EXCLUDED.redaction_fields,\n  personal_data_found = EXCLUDED.personal_data_found,\n  sensitive_data_detected = EXCLUDED.sensitive_data_detected,\n  data_volume = EXCLUDED.data_volume,\n  notify_dpo = EXCLUDED.notify_dpo,\n  status = EXCLUDED.status,\n  gdpr_action_performed = EXCLUDED.gdpr_action_performed,\n  ai_decision_timestamp = EXCLUDED.ai_decision_timestamp,\n  gdpr_completed_at = EXCLUDED.gdpr_completed_at,\n  updated_at = CURRENT_TIMESTAMP\nRETURNING *;",
+        "options": {}
       },
-      "name": "🔍 DEBUG: Kiểm tra dữ liệu",
+      "name": "1️⃣1️⃣ Lưu kết quả GDPR vào PostgreSQL",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        2128,
+        352
+      ],
+      "id": "1425a37a-f1e7-40b3-b2dd-23242095d644"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 📤 Chuẩn bị dữ liệu gửi sang Flow 3 (Document Sharing)\n// Lấy dữ liệu từ PostgreSQL result hoặc từ node trước\nconst pgResult = $json || {};\n\n// Lấy dữ liệu từ node chuẩn bị data (nếu cần)\nlet preparedData = {};\ntry {\n  preparedData = $('1️⃣2️⃣ Chuẩn bị Data GDPR đầy đủ').item.json || {};\n} catch (e) {\n  console.warn('⚠️ Không thể lấy dữ liệu từ Prepare node:', e.message);\n}\n\n// Merge dữ liệu: ưu tiên PostgreSQL result, sau đó prepared data\nconst dataForFlow3 = {\n  // Thông tin file cơ bản\n  processing_id: pgResult.processing_id || preparedData.processing_id || null,\n  processingId: pgResult.processing_id || preparedData.processing_id || null,\n  file_name: pgResult.file_name || preparedData.file_name || null,\n  fileName: pgResult.file_name || preparedData.file_name || null,\n  file_url: pgResult.file_url || preparedData.file_url || null,\n  fileUrl: pgResult.file_url || preparedData.file_url || null,\n  cloudinary_url: pgResult.cloudinary_url || preparedData.cloudinary_url || null,\n  cloudinaryUrl: pgResult.cloudinary_url || preparedData.cloudinary_url || null,\n  user_id: pgResult.user_id || preparedData.user_id || null,\n  userId: pgResult.user_id || preparedData.user_id || null,\n  department: pgResult.department || preparedData.department || null,\n  uploader: pgResult.uploader || preparedData.uploader || null,\n  \n  // Kết quả GDPR từ Flow 2\n  gdpr_decision: pgResult.gdpr_decision || preparedData.gdpr_decision || null,\n  gdprDecision: pgResult.gdpr_decision || preparedData.gdpr_decision || null,\n  gdpr_justification: pgResult.gdpr_justification || preparedData.gdpr_justification || null,\n  gdprJustification: pgResult.gdpr_justification || preparedData.gdpr_justification || null,\n  legal_basis: pgResult.legal_basis || preparedData.legal_basis || null,\n  legalBasis: pgResult.legal_basis || preparedData.legal_basis || null,\n  retention_days: pgResult.retention_days || preparedData.retention_days || 30,\n  retentionDays: pgResult.retention_days || preparedData.retention_days || 30,\n  \n  // Arrays\n  redaction_fields: pgResult.redaction_fields || preparedData.redaction_fields || [],\n  redactionFields: pgResult.redaction_fields || preparedData.redaction_fields || [],\n  personal_data_found: pgResult.personal_data_found || preparedData.personal_data_found || [],\n  personalDataFound: pgResult.personal_data_found || preparedData.personal_data_found || [],\n  \n  // Flags\n  sensitive_data_detected: pgResult.sensitive_data_detected !== undefined ? pgResult.sensitive_data_detected : (preparedData.sensitive_data_detected !== undefined ? preparedData.sensitive_data_detected : false),\n  sensitiveDataDetected: pgResult.sensitive_data_detected !== undefined ? pgResult.sensitive_data_detected : (preparedData.sensitive_data_detected !== undefined ? preparedData.sensitive_data_detected : false),\n  data_volume: pgResult.data_volume || preparedData.data_volume || null,\n  dataVolume: pgResult.data_volume || preparedData.data_volume || null,\n  notify_dpo: pgResult.notify_dpo !== undefined ? pgResult.notify_dpo : (preparedData.notify_dpo !== undefined ? preparedData.notify_dpo : false),\n  notifyDPO: pgResult.notify_dpo !== undefined ? pgResult.notify_dpo : (preparedData.notify_dpo !== undefined ? preparedData.notify_dpo : false),\n  \n  // Status\n  status: pgResult.status || preparedData.status || 'gdpr_completed',\n  gdpr_action_performed: pgResult.gdpr_action_performed || preparedData.gdpr_action_performed || null,\n  gdprActionPerformed: pgResult.gdpr_action_performed || preparedData.gdpr_action_performed || null,\n  \n  // Timestamps\n  ai_decision_timestamp: pgResult.ai_decision_timestamp || preparedData.ai_decision_timestamp || null,\n  aiDecisionTimestamp: pgResult.ai_decision_timestamp || preparedData.ai_decision_timestamp || null,\n  gdpr_completed_at: pgResult.gdpr_completed_at || preparedData.gdpr_completed_at || null,\n  gdprCompletedAt: pgResult.gdpr_completed_at || preparedData.gdpr_completed_at || null,\n  \n  // Metadata\n  workflow_source: 'flow2-gdpr-compliance',\n  flow2_completed: true,\n  \n  // Note: recipient_emails, recipient_names, sharing_method sẽ được frontend gửi kèm\n  // Flow 2 chỉ gửi dữ liệu GDPR, frontend sẽ thêm thông tin chia sẻ\n};\n\nconsole.log('✅ Đã chuẩn bị dữ liệu gửi sang Flow 3:');\nconsole.log('   Processing ID:', dataForFlow3.processing_id);\nconsole.log('   File Name:', dataForFlow3.file_name);\nconsole.log('   GDPR Decision:', dataForFlow3.gdpr_decision);\nconsole.log('   Legal Basis:', dataForFlow3.legal_basis);\n\nreturn [{ json: dataForFlow3 }];"
+      },
+      "name": "1️⃣3️⃣ Chuẩn bị Data gửi Flow 3",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        32,
-        112
+        2240,
+        352
       ],
-      "id": "030633ec-0900-4e7e-b5a4-66c6dc76dc82"
+      "id": "prepare-data-for-flow3"
     },
     {
       "parameters": {
-        "pollTimes": {
-          "item": [
-            {
-              "mode": "everyMinute"
+        "method": "POST",
+        "url": "=https://n8n.aidocmanageagent.io.vn/webhook/document-management",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
             }
-          ]
-        },
-        "triggerOn": "specificFolder",
-        "folderToWatch": {
-          "__rl": true,
-          "value": "19dKOR2bA5dHGHCtfZ416c5qVou0lcDwF",
-          "mode": "list",
-          "cachedResultName": "Extract PDF",
-          "cachedResultUrl": "https://drive.google.com/drive/folders/19dKOR2bA5dHGHCtfZ416c5qVou0lcDwF"
-        },
-        "event": "fileCreated",
+          }
+        }
+      },
+      "name": "1️⃣4️⃣ Gửi dữ liệu sang Flow 3",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2360,
+        352
+      ],
+      "id": "send-to-flow3",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// 📊 Chuẩn bị dữ liệu GDPR đầy đủ để lưu vào PostgreSQL\n// Lấy dữ liệu từ node Parse quyết định GDPR\nlet gdprData = {};\nlet normalizedData = {};\n\ntry {\n  // Lấy từ node Parse quyết định GDPR (có đầy đủ thông tin GDPR)\n  gdprData = $('4️⃣ Parse quyết định GDPR').item.json || {};\n} catch (e) {\n  console.warn('⚠️ Không thể lấy dữ liệu từ Parse node:', e.message);\n}\n\ntry {\n  // Lấy từ node chuẩn hóa (có thông tin file gốc)\n  normalizedData = $('2️⃣ Chuẩn hóa dữ liệu đầu vào').item.json || {};\n} catch (e) {\n  console.warn('⚠️ Không thể lấy dữ liệu từ Normalize node:', e.message);\n}\n\n// Helper function để convert array thành PostgreSQL array format\nfunction formatArrayForPostgres(arr) {\n  if (!Array.isArray(arr) || arr.length === 0) return [];\n  return arr.map(item => String(item));\n}\n\n// Merge tất cả dữ liệu để có kết quả GDPR đầy đủ\nconst result = {\n  // Audit info\n  auditId: `gdpr_${Date.now()}`,\n  audit_id: `gdpr_${Date.now()}`,\n  timestamp: new Date().toISOString(),\n  \n  // Thông tin file cơ bản\n  processingId: gdprData.processingId || normalizedData.processingId || $json.processingId || null,\n  processing_id: gdprData.processingId || normalizedData.processingId || $json.processingId || null,\n  fileName: gdprData.fileName || normalizedData.fileName || $json.fileName || null,\n  file_name: gdprData.fileName || normalizedData.fileName || $json.fileName || null,\n  fileUrl: gdprData.fileUrl || normalizedData.fileUrl || $json.fileUrl || null,\n  file_url: gdprData.fileUrl || normalizedData.fileUrl || $json.fileUrl || null,\n  cloudinaryUrl: gdprData.cloudinaryUrl || normalizedData.cloudinaryUrl || $json.cloudinaryUrl || null,\n  cloudinary_url: gdprData.cloudinaryUrl || normalizedData.cloudinaryUrl || $json.cloudinaryUrl || null,\n  userId: gdprData.userId || normalizedData.userId || $json.userId || null,\n  user_id: gdprData.userId || normalizedData.userId || $json.userId || null,\n  department: gdprData.department || normalizedData.department || $json.department || null,\n  uploader: gdprData.uploader || normalizedData.uploader || $json.uploader || null,\n  \n  // Kết quả phân tích từ Flow 1 (nếu có) - giữ nguyên JSONB\n  analysisResults: gdprData.analysisResults || normalizedData.analysisResults || $json.analysisResults || null,\n  analysis_results: gdprData.analysisResults || normalizedData.analysisResults || $json.analysisResults || null,\n  \n  // Kết quả GDPR từ Flow 2\n  gdprDecision: gdprData.gdprDecision || $json.gdprDecision || null,\n  gdpr_decision: gdprData.gdprDecision || $json.gdprDecision || null,\n  gdprJustification: gdprData.gdprJustification || $json.gdprJustification || null,\n  gdpr_justification: gdprData.gdprJustification || $json.gdprJustification || null,\n  legalBasis: gdprData.legalBasis || $json.legalBasis || null,\n  legal_basis: gdprData.legalBasis || $json.legalBasis || null,\n  retentionDays: gdprData.retentionDays || $json.retentionDays || 30,\n  retention_days: gdprData.retentionDays || $json.retentionDays || 30,\n  \n  // Arrays - giữ nguyên array format để PostgreSQL node xử lý\n  redactionFields: formatArrayForPostgres(gdprData.redactionFields || $json.redactionFields || []),\n  redaction_fields: formatArrayForPostgres(gdprData.redactionFields || $json.redactionFields || []),\n  personalDataFound: formatArrayForPostgres(gdprData.personalDataFound || $json.personalDataFound || []),\n  personal_data_found: formatArrayForPostgres(gdprData.personalDataFound || $json.personalDataFound || []),\n  \n  sensitiveDataDetected: gdprData.sensitiveDataDetected !== undefined ? gdprData.sensitiveDataDetected : ($json.sensitiveDataDetected !== undefined ? $json.sensitiveDataDetected : false),\n  sensitive_data_detected: gdprData.sensitiveDataDetected !== undefined ? gdprData.sensitiveDataDetected : ($json.sensitiveDataDetected !== undefined ? $json.sensitiveDataDetected : false),\n  dataVolume: gdprData.dataVolume || $json.dataVolume || null,\n  data_volume: gdprData.dataVolume || $json.dataVolume || null,\n  notifyDPO: gdprData.notifyDPO !== undefined ? gdprData.notifyDPO : ($json.notifyDPO !== undefined ? $json.notifyDPO : false),\n  notify_dpo: gdprData.notifyDPO !== undefined ? gdprData.notifyDPO : ($json.notifyDPO !== undefined ? $json.notifyDPO : false),\n  \n  // Status và action\n  status: $json.status || $json.gdprActionPerformed || 'gdpr_completed',\n  gdprActionPerformed: $json.gdprActionPerformed || null,\n  gdpr_action_performed: $json.gdprActionPerformed || null,\n  \n  // Timestamps\n  aiDecisionTimestamp: gdprData.aiDecisionTimestamp || $json.aiDecisionTimestamp || new Date().toISOString(),\n  ai_decision_timestamp: gdprData.aiDecisionTimestamp || $json.aiDecisionTimestamp || new Date().toISOString(),\n  created_at: normalizedData.receivedAt || new Date().toISOString(),\n  updated_at: new Date().toISOString(),\n  gdpr_completed_at: gdprData.aiDecisionTimestamp || $json.aiDecisionTimestamp || new Date().toISOString(),\n  \n  // Metadata\n  workflow_source: 'flow2-gdpr-compliance',\n  flow2_completed: true\n};\n\nconsole.log('✅ Đã chuẩn bị dữ liệu GDPR đầy đủ cho PostgreSQL:');\nconsole.log('   Processing ID:', result.processing_id);\nconsole.log('   File Name:', result.file_name);\nconsole.log('   GDPR Decision:', result.gdpr_decision);\nconsole.log('   Legal Basis:', result.legal_basis);\nconsole.log('   Notify DPO:', result.notify_dpo);\nconsole.log('   Redaction Fields:', result.redaction_fields);\nconsole.log('   Personal Data Found:', result.personal_data_found);\n\nreturn [{ json: result }];"
+      },
+      "name": "1️⃣2️⃣ Chuẩn bị Data GDPR đầy đủ",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2320,
+        352
+      ],
+      "id": "1532d717-8c9f-439e-8118-7d59844beae1"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "gdpr",
+        "responseMode": "responseNode",
         "options": {}
       },
-      "type": "n8n-nodes-base.googleDriveTrigger",
+      "name": "🔍 Webhook GET: Query GDPR Result",
+      "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [
-        -1584,
-        -48
+        176,
+        600
       ],
-      "id": "152d20a2-fe8b-4759-8d55-d0ca0b232ffb",
-      "name": "Google Drive Trigger1",
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "atJ86VdDoYyS4tiT",
-          "name": "Google Drive account 2"
-        }
-      }
+      "id": "query-gdpr-webhook",
+      "webhookId": "query-gdpr-result"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 🔍 Parse processingId từ query parameter\n// Lấy processingId từ query parameter của webhook GET\nconst query = $json.query || {};\nconst processingId = query.processingId || query.processing_id || null;\n\nif (!processingId) {\n  return [{\n    json: {\n      success: false,\n      error: 'Missing processingId parameter',\n      message: 'Vui lòng cung cấp processingId trong query parameter. Ví dụ: /gdpr?processingId=xxx'\n    }\n  }];\n}\n\n// Trả về processingId để node Google Sheets Read có thể query\nreturn [{\n  json: {\n    processingId: processingId,\n    processing_id: processingId,\n    query: query\n  }\n}];"
+      },
+      "name": "🔍 Parse processingId",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        600
+      ],
+      "id": "query-gdpr-from-sheets"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT \n  id,\n  processing_id,\n  audit_id,\n  file_name,\n  file_url,\n  cloudinary_url,\n  user_id,\n  department,\n  uploader,\n  analysis_results,\n  gdpr_decision,\n  gdpr_justification,\n  legal_basis,\n  retention_days,\n  redaction_fields,\n  personal_data_found,\n  sensitive_data_detected,\n  data_volume,\n  notify_dpo,\n  status,\n  gdpr_action_performed,\n  created_at,\n  updated_at,\n  ai_decision_timestamp,\n  gdpr_completed_at,\n  workflow_source,\n  flow2_completed\nFROM gdpr_compliance_results \nWHERE processing_id = '{{ $json.processingId || $json.processing_id }}' \nORDER BY created_at DESC \nLIMIT 1;",
+        "options": {}
+      },
+      "name": "🔍 Query GDPR từ PostgreSQL",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        600,
+        600
+      ],
+      "id": "read-gdpr-from-sheets"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 📊 Format và xử lý dữ liệu từ PostgreSQL\n// PostgreSQL node có thể trả về array hoặc object\nlet pgData = null;\n\n// Xử lý dữ liệu từ PostgreSQL\nif (Array.isArray($json)) {\n  // Nếu là array, lấy phần tử đầu tiên\n  pgData = $json.length > 0 ? $json[0] : null;\n} else if ($json && typeof $json === 'object') {\n  // Nếu là object, dùng trực tiếp\n  pgData = $json;\n} else {\n  // Nếu không có dữ liệu\n  pgData = null;\n}\n\n// Kiểm tra nếu không tìm thấy dữ liệu\nif (!pgData || !pgData.processing_id) {\n  return [{\n    json: {\n      success: false,\n      error: 'Không tìm thấy kết quả GDPR với processingId này',\n      message: 'Không có dữ liệu GDPR trong database'\n    }\n  }];\n}\n\n// Format dữ liệu đầy đủ - đảm bảo tất cả các trường được bao gồm\nconst formattedData = {\n  // ID và metadata\n  id: pgData.id || null,\n  processing_id: pgData.processing_id || null,\n  processingId: pgData.processing_id || null,\n  audit_id: pgData.audit_id || null,\n  auditId: pgData.audit_id || null,\n  \n  // Thông tin file cơ bản\n  file_name: pgData.file_name || null,\n  fileName: pgData.file_name || null,\n  file_url: pgData.file_url || null,\n  fileUrl: pgData.file_url || null,\n  cloudinary_url: pgData.cloudinary_url || null,\n  cloudinaryUrl: pgData.cloudinary_url || null,\n  user_id: pgData.user_id || null,\n  userId: pgData.user_id || null,\n  department: pgData.department || null,\n  uploader: pgData.uploader || null,\n  \n  // Kết quả phân tích từ Flow 1 (JSONB)\n  analysis_results: pgData.analysis_results || null,\n  analysisResults: pgData.analysis_results || null,\n  \n  // Kết quả GDPR từ Flow 2\n  gdpr_decision: pgData.gdpr_decision || null,\n  gdprDecision: pgData.gdpr_decision || null,\n  gdpr_justification: pgData.gdpr_justification || null,\n  gdprJustification: pgData.gdpr_justification || null,\n  legal_basis: pgData.legal_basis || null,\n  legalBasis: pgData.legal_basis || null,\n  retention_days: pgData.retention_days || 30,\n  retentionDays: pgData.retention_days || 30,\n  \n  // Arrays - đảm bảo luôn là array\n  redaction_fields: Array.isArray(pgData.redaction_fields) ? pgData.redaction_fields : (pgData.redaction_fields ? [pgData.redaction_fields] : []),\n  redactionFields: Array.isArray(pgData.redaction_fields) ? pgData.redaction_fields : (pgData.redaction_fields ? [pgData.redaction_fields] : []),\n  personal_data_found: Array.isArray(pgData.personal_data_found) ? pgData.personal_data_found : (pgData.personal_data_found ? [pgData.personal_data_found] : []),\n  personalDataFound: Array.isArray(pgData.personal_data_found) ? pgData.personal_data_found : (pgData.personal_data_found ? [pgData.personal_data_found] : []),\n  \n  // Flags\n  sensitive_data_detected: pgData.sensitive_data_detected !== undefined ? pgData.sensitive_data_detected : false,\n  sensitiveDataDetected: pgData.sensitive_data_detected !== undefined ? pgData.sensitive_data_detected : false,\n  data_volume: pgData.data_volume || null,\n  dataVolume: pgData.data_volume || null,\n  notify_dpo: pgData.notify_dpo !== undefined ? pgData.notify_dpo : false,\n  notifyDPO: pgData.notify_dpo !== undefined ? pgData.notify_dpo : false,\n  \n  // Status và action\n  status: pgData.status || 'gdpr_completed',\n  gdpr_action_performed: pgData.gdpr_action_performed || null,\n  gdprActionPerformed: pgData.gdpr_action_performed || null,\n  \n  // Timestamps\n  created_at: pgData.created_at || null,\n  createdAt: pgData.created_at || null,\n  updated_at: pgData.updated_at || null,\n  updatedAt: pgData.updated_at || null,\n  ai_decision_timestamp: pgData.ai_decision_timestamp || null,\n  aiDecisionTimestamp: pgData.ai_decision_timestamp || null,\n  gdpr_completed_at: pgData.gdpr_completed_at || null,\n  gdprCompletedAt: pgData.gdpr_completed_at || null,\n  \n  // Metadata\n  workflow_source: pgData.workflow_source || 'flow2-gdpr-compliance',\n  workflowSource: pgData.workflow_source || 'flow2-gdpr-compliance',\n  flow2_completed: pgData.flow2_completed !== undefined ? pgData.flow2_completed : true,\n  flow2Completed: pgData.flow2_completed !== undefined ? pgData.flow2_completed : true\n};\n\nconsole.log('✅ Đã format dữ liệu GDPR từ PostgreSQL:');\nconsole.log('   Processing ID:', formattedData.processing_id);\nconsole.log('   File Name:', formattedData.file_name);\nconsole.log('   GDPR Decision:', formattedData.gdpr_decision);\nconsole.log('   Legal Basis:', formattedData.legal_basis);\nconsole.log('   Redaction Fields:', formattedData.redaction_fields);\nconsole.log('   Personal Data Found:', formattedData.personal_data_found);\nconsole.log('   Analysis Results:', formattedData.analysis_results ? 'Có' : 'Không có');\n\nreturn [{\n  json: {\n    success: true,\n    data: formattedData\n  }\n}];"
+      },
+      "name": "📋 Format dữ liệu GDPR từ PostgreSQL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        600
+      ],
+      "id": "format-gdpr-data-from-postgres"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "name": "📤 Trả về kết quả GDPR",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        800,
+        600
+      ],
+      "id": "respond-gdpr-result"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gdpr-compliance",
+        "options": {}
+      },
+      "name": "1️⃣ Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        176,
+        352
+      ],
+      "id": "4cb1e81b-bd99-4ac2-bc0d-f2b6589c2577",
+      "webhookId": "gdpr-compliance-webhook"
     }
   ],
   "pinData": {},
   "connections": {
-    "1️⃣ Webhook - Nhận processingId": {
+    "2️⃣ Chuẩn hóa dữ liệu đầu vào": {
       "main": [
         [
           {
-            "node": "2️⃣ Get Data from API",
+            "node": "2.5️⃣ Download File từ Cloudinary",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "2️⃣ Get Data from API": {
+    "2.5️⃣ Download File từ Cloudinary": {
       "main": [
         [
           {
-            "node": "3️⃣ Format Data for GDPR",
+            "node": "2.6️⃣ Merge File Data",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "3️⃣ Format Data for GDPR": {
+    "2.6️⃣ Merge File Data": {
+      "main": [
+        [
+          {
+            "node": "2.7️⃣ Chuẩn bị Prompt GDPR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2.7️⃣ Chuẩn bị Prompt GDPR": {
       "main": [
         [
           {
@@ -579,69 +542,109 @@
       "main": [
         [
           {
-            "node": "8️⃣ Cần thông báo DPO?",
+            "node": "1️⃣2️⃣ Chuẩn bị Data GDPR đầy đủ",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "8️⃣ Cần thông báo DPO?": {
+    "1️⃣2️⃣ Chuẩn bị Data GDPR đầy đủ": {
       "main": [
         [
           {
-            "node": "9️⃣ Gửi email DPO",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "🔍 DEBUG: Kiểm tra dữ liệu",
+            "node": "1️⃣1️⃣.5️⃣ Format Data cho PostgreSQL",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "9️⃣ Gửi email DPO": {
+    "1️⃣1️⃣.5️⃣ Format Data cho PostgreSQL": {
       "main": [
         [
           {
-            "node": "🔍 DEBUG: Kiểm tra dữ liệu",
+            "node": "1️⃣1️⃣ Lưu kết quả GDPR vào PostgreSQL",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "🔍 DEBUG: Kiểm tra dữ liệu": {
+    "1️⃣1️⃣ Lưu kết quả GDPR vào PostgreSQL": {
       "main": [
         [
           {
-            "node": "1️⃣0️⃣ Thông báo kết quả cho uploader",
+            "node": "1️⃣3️⃣ Chuẩn bị Data gửi Flow 3",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "1️⃣0️⃣ Thông báo kết quả cho uploader": {
+    "1️⃣3️⃣ Chuẩn bị Data gửi Flow 3": {
       "main": [
         [
           {
-            "node": "1️⃣1️⃣ Ghi log GDPR vào Sheets",
+            "node": "1️⃣4️⃣ Gửi dữ liệu sang Flow 3",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "1️⃣1️⃣ Ghi log GDPR vào Sheets": {
+    "1️⃣4️⃣ Gửi dữ liệu sang Flow 3": {
+      "main": []
+    },
+    "🔍 Webhook GET: Query GDPR Result": {
       "main": [
         [
           {
-            "node": "1️⃣2️⃣ Tạo Audit Trail GDPR",
+            "node": "🔍 Parse processingId",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔍 Parse processingId": {
+      "main": [
+        [
+          {
+            "node": "🔍 Query GDPR từ PostgreSQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔍 Query GDPR từ PostgreSQL": {
+      "main": [
+        [
+          {
+            "node": "📋 Format dữ liệu GDPR từ PostgreSQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📋 Format dữ liệu GDPR từ PostgreSQL": {
+      "main": [
+        [
+          {
+            "node": "📤 Trả về kết quả GDPR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1️⃣ Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "2️⃣ Chuẩn hóa dữ liệu đầu vào",
             "type": "main",
             "index": 0
           }
@@ -649,15 +652,14 @@
       ]
     }
   },
-  "active": true,
+  "active": false,
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "6b553c41-3c17-4fd3-ab90-ca625fadd1ce",
+  "versionId": "775bb188-57b6-4b9f-b5f4-c1d457b64bbb",
   "meta": {
-    "templateCredsSetupCompleted": true,
     "instanceId": "d29aff038a4897a8be0d9843c07ba06d6b485556105b19c20835a7b0bfd5b9b2"
   },
-  "id": "NovgqYS6R0udt74I",
+  "id": "u47swad2UNGjafFK",
   "tags": []
 }

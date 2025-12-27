@@ -1314,6 +1314,376 @@ app.post('/webhook/flow3-result', (req, res) => {
   res.json({ success: true });
 });
 
+// POST /api/document/trigger-gdpr - Trigger GDPR workflow for a processing ID
+app.post('/api/document/trigger-gdpr', async (req, res) => {
+  try {
+    const { processingId } = req.body;
+    
+    if (!processingId) {
+      return res.status(400).json({
+        success: false,
+        error: 'processingId is required'
+      });
+    }
+    
+    console.log(`🔍 Triggering GDPR workflow for ${processingId}`);
+    
+    // Lấy dữ liệu từ PostgreSQL
+    let documentData;
+    try {
+      const query = `
+        SELECT 
+          processing_id,
+          file_name,
+          file_url,
+          cloudinary_url,
+          user_id,
+          department,
+          status,
+          analysis_results,
+          docx_url,
+          created_at,
+          updated_at,
+          analysis_completed_at
+        FROM documents
+        WHERE processing_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+      `;
+      
+      const result = await pgPool.query(query, [processingId]);
+      
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Document not found in PostgreSQL'
+        });
+      }
+      
+      documentData = result.rows[0];
+    } catch (pgError) {
+      console.error('❌ PostgreSQL error:', pgError);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch document from PostgreSQL',
+        message: pgError.message
+      });
+    }
+    
+    // Format dữ liệu để gửi đến Flow 3 (GDPR Compliance)
+    const gdprData = {
+      success: true,
+      processingId: documentData.processing_id,
+      message: "Document analysis completed, triggering GDPR check",
+      data: {
+        processing_id: documentData.processing_id,
+        file_name: documentData.file_name,
+        file_url: documentData.file_url,
+        user_id: documentData.user_id,
+        department: documentData.department,
+        status: documentData.status,
+        analysis_results: documentData.analysis_results,
+        cloudinary_url: documentData.cloudinary_url || documentData.file_url,
+        docx_url: documentData.docx_url || '',
+        created_at: documentData.created_at,
+        updated_at: documentData.updated_at,
+        analysis_completed_at: documentData.analysis_completed_at
+      },
+      file: {
+        name: documentData.file_name,
+        url: documentData.cloudinary_url || documentData.file_url,
+        cloudinary_url: documentData.cloudinary_url || documentData.file_url,
+        processingId: documentData.processing_id
+      }
+    };
+    
+    // Gửi đến Flow 3 (GDPR Compliance webhook)
+    try {
+      console.log(`📤 Sending data to GDPR workflow: ${FLOW3_URL}`);
+      const gdprResponse = await axios.post(FLOW3_URL, gdprData, {
+        timeout: 30000,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log(`✅ GDPR workflow triggered for ${processingId}`);
+      console.log(`   Response status: ${gdprResponse.status}`);
+      
+      // Cập nhật status
+      if (processingStatus.has(processingId)) {
+        processingStatus.get(processingId).steps.gdpr = 'processing';
+        processingStatus.get(processingId).updatedAt = new Date().toISOString();
+      }
+      
+      res.json({
+        success: true,
+        message: 'GDPR workflow triggered successfully',
+        processingId: processingId
+      });
+      
+    } catch (gdprError) {
+      console.error(`❌ Failed to trigger GDPR workflow for ${processingId}:`, gdprError.message);
+      
+      if (processingStatus.has(processingId)) {
+        processingStatus.get(processingId).steps.gdpr = 'failed';
+        processingStatus.get(processingId).error = `GDPR workflow trigger failed: ${gdprError.message}`;
+      }
+      
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to trigger GDPR workflow',
+        message: gdprError.message
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ Error in trigger-gdpr endpoint:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message
+    });
+  }
+});
+
+// POST /api/document/trigger-sharing - Trigger Document Sharing workflow (Flow 3) for a processing ID
+app.post('/api/document/trigger-sharing', async (req, res) => {
+  try {
+    const { 
+      processingId, 
+      recipient_emails, 
+      recipient_names,
+      recipients,
+      department,
+      sharing_method = 'email',
+      access_level = 'viewer'
+    } = req.body;
+    
+    if (!processingId) {
+      return res.status(400).json({
+        success: false,
+        error: 'processingId is required'
+      });
+    }
+    
+    if (!recipient_emails || (Array.isArray(recipient_emails) && recipient_emails.length === 0)) {
+      return res.status(400).json({
+        success: false,
+        error: 'recipient_emails is required and must not be empty'
+      });
+    }
+    
+    console.log(`🔍 Triggering Document Sharing workflow for ${processingId}`);
+    console.log(`   Recipients: ${Array.isArray(recipient_emails) ? recipient_emails.join(', ') : recipient_emails}`);
+    
+    // Lấy dữ liệu từ PostgreSQL - JOIN với gdpr_compliance_results để lấy GDPR data
+    let documentData;
+    let gdprData = null;
+    
+    try {
+      // Query document từ bảng documents
+      const docQuery = `
+        SELECT 
+          processing_id,
+          file_name,
+          file_url,
+          cloudinary_url,
+          user_id,
+          department,
+          status,
+          analysis_results,
+          docx_url,
+          created_at,
+          updated_at,
+          analysis_completed_at
+        FROM documents
+        WHERE processing_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+      `;
+      
+      const docResult = await pgPool.query(docQuery, [processingId]);
+      
+      if (docResult.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Document not found in PostgreSQL'
+        });
+      }
+      
+      documentData = docResult.rows[0];
+      
+      // Query GDPR data từ bảng gdpr_compliance_results
+      const gdprQuery = `
+        SELECT 
+          gdpr_decision,
+          gdpr_justification,
+          legal_basis,
+          retention_days,
+          redaction_fields,
+          personal_data_found,
+          sensitive_data_detected,
+          data_volume,
+          notify_dpo,
+          gdpr_action_performed,
+          ai_decision_timestamp,
+          gdpr_completed_at
+        FROM gdpr_compliance_results
+        WHERE processing_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+      `;
+      
+      const gdprResult = await pgPool.query(gdprQuery, [processingId]);
+      if (gdprResult.rows.length > 0) {
+        gdprData = gdprResult.rows[0];
+      }
+      
+    } catch (pgError) {
+      console.error('❌ PostgreSQL error:', pgError);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch document from PostgreSQL',
+        message: pgError.message
+      });
+    }
+    
+    // Format recipient_emails và recipient_names
+    let finalRecipientEmails = [];
+    let finalRecipientNames = [];
+    
+    if (recipients && Array.isArray(recipients)) {
+      // Nếu có recipients array với name và email
+      finalRecipientEmails = recipients.map(r => r.email).filter(Boolean);
+      finalRecipientNames = recipients.map(r => r.name || '').filter(Boolean);
+    } else {
+      // Fallback: dùng recipient_emails và recipient_names
+      finalRecipientEmails = Array.isArray(recipient_emails) ? recipient_emails : [recipient_emails].filter(Boolean);
+      finalRecipientNames = Array.isArray(recipient_names) ? recipient_names : (recipient_names ? [recipient_names] : []);
+      
+      // Nếu không có names, tạo array rỗng với cùng length
+      if (finalRecipientNames.length === 0) {
+        finalRecipientNames = new Array(finalRecipientEmails.length).fill('');
+      }
+    }
+    
+    // Format dữ liệu để gửi đến Flow 3 (Document Sharing)
+    const sharingData = {
+      processing_id: documentData.processing_id,
+      processingId: documentData.processing_id,
+      file_name: documentData.file_name,
+      fileName: documentData.file_name,
+      file_url: documentData.file_url || documentData.cloudinary_url,
+      fileUrl: documentData.file_url || documentData.cloudinary_url,
+      cloudinary_url: documentData.cloudinary_url || documentData.file_url,
+      cloudinaryUrl: documentData.cloudinary_url || documentData.file_url,
+      docx_url: documentData.docx_url || null,
+      user_id: documentData.user_id || null,
+      userId: documentData.user_id || null,
+      department: department || documentData.department || null,
+      
+      // Recipients
+      recipient_emails: finalRecipientEmails,
+      recipientEmails: finalRecipientEmails,
+      recipient_names: finalRecipientNames,
+      recipientNames: finalRecipientNames,
+      recipients: recipients || finalRecipientEmails.map((email, index) => ({
+        name: finalRecipientNames[index] || '',
+        email: email
+      })),
+      
+      // Sharing settings
+      sharing_method: sharing_method,
+      access_level: access_level,
+      
+      // GDPR data từ database
+      gdpr_decision: gdprData?.gdpr_decision || null,
+      gdprDecision: gdprData?.gdpr_decision || null,
+      gdpr_justification: gdprData?.gdpr_justification || null,
+      gdprJustification: gdprData?.gdpr_justification || null,
+      legal_basis: gdprData?.legal_basis || null,
+      legalBasis: gdprData?.legal_basis || null,
+      retention_days: gdprData?.retention_days || 30,
+      retentionDays: gdprData?.retention_days || 30,
+      redaction_fields: gdprData?.redaction_fields || [],
+      personal_data_found: gdprData?.personal_data_found || [],
+      sensitive_data_detected: gdprData?.sensitive_data_detected || false,
+      data_volume: gdprData?.data_volume || null,
+      notify_dpo: gdprData?.notify_dpo || false,
+      
+      // Analysis results
+      analysis_results: documentData.analysis_results || null,
+      analysisResults: documentData.analysis_results || null,
+      
+      // Metadata
+      gdpr_approved: true, // Frontend đã approve
+      status: 'pending',
+      sharing_status: 'queued',
+      workflow_source: 'flow3-document-sharing'
+    };
+    
+    // Gửi đến Flow 3 (Document Sharing webhook)
+    // Sử dụng URL đầy đủ: https://n8n.aidocmanageagent.io.vn/webhook/document-sharing
+    const SHARING_WEBHOOK_URL = process.env.N8N_SHARING_WEBHOOK_URL || 
+                                 'https://n8n.aidocmanageagent.io.vn/webhook/document-sharing';
+    
+    try {
+      console.log(`📤 Sending data to Document Sharing workflow: ${SHARING_WEBHOOK_URL}`);
+      console.log(`   File: ${sharingData.file_name}`);
+      console.log(`   Recipients: ${finalRecipientEmails.length} emails`);
+      
+      const sharingResponse = await axios.post(SHARING_WEBHOOK_URL, sharingData, {
+        timeout: 30000,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log(`✅ Document Sharing workflow triggered for ${processingId}`);
+      console.log(`   Response status: ${sharingResponse.status}`);
+      
+      // Cập nhật status
+      if (processingStatus.has(processingId)) {
+        processingStatus.get(processingId).steps.sharing = 'processing';
+        processingStatus.get(processingId).updatedAt = new Date().toISOString();
+      }
+      
+      res.json({
+        success: true,
+        message: 'Document Sharing workflow triggered successfully',
+        processingId: processingId,
+        recipients: finalRecipientEmails.length,
+        needApproval: false // Có thể thêm logic kiểm tra nếu cần
+      });
+      
+    } catch (sharingError) {
+      console.error(`❌ Failed to trigger Document Sharing workflow for ${processingId}:`, sharingError.message);
+      console.error(`   Error details:`, sharingError.response?.data || sharingError.message);
+      
+      if (processingStatus.has(processingId)) {
+        processingStatus.get(processingId).steps.sharing = 'failed';
+        processingStatus.get(processingId).error = `Sharing workflow trigger failed: ${sharingError.message}`;
+      }
+      
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to trigger Document Sharing workflow',
+        message: sharingError.message,
+        details: sharingError.response?.data || null
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ Error in trigger-sharing endpoint:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message
+    });
+  }
+});
+
 // ============================================
 // PostgreSQL Data Retrieval API Endpoints
 // ============================================
@@ -1628,6 +1998,713 @@ app.post('/api/document/send-completed-data', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch or send document data',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /gdpr
+ * Lấy tất cả các file từ bảng documents (Flow 1) kèm kết quả phân tích và GDPR
+ * JOIN với bảng gdpr_compliance_results để lấy kết quả GDPR nếu có
+ * Query params: limit, offset, userId, department, gdpr_decision, status, search
+ */
+app.get('/gdpr', async (req, res) => {
+  try {
+    const { 
+      limit = 50, 
+      offset = 0, 
+      userId, 
+      department,
+      gdpr_decision,
+      status,
+      search, // Tìm kiếm theo file_name
+      has_analysis = true // Chỉ lấy file đã có kết quả phân tích
+    } = req.query;
+    
+    console.log(`📊 Fetching documents with analysis and GDPR results from PostgreSQL:`, {
+      limit,
+      offset,
+      userId,
+      department,
+      gdpr_decision,
+      status,
+      search,
+      has_analysis
+    });
+    
+    // Build WHERE clause dynamically
+    const whereConditions = [];
+    const queryParams = [];
+    let paramIndex = 1;
+    
+    // Base condition: chỉ lấy file đã có kết quả phân tích
+    if (has_analysis === 'true' || has_analysis === true) {
+      whereConditions.push(`d.analysis_results IS NOT NULL`);
+      whereConditions.push(`d.status = 'completed'`);
+    }
+    
+    if (userId) {
+      whereConditions.push(`d.user_id = $${paramIndex}`);
+      queryParams.push(userId);
+      paramIndex++;
+    }
+    
+    if (department) {
+      whereConditions.push(`d.department = $${paramIndex}`);
+      queryParams.push(department);
+      paramIndex++;
+    }
+    
+    if (gdpr_decision) {
+      whereConditions.push(`g.gdpr_decision = $${paramIndex}`);
+      queryParams.push(gdpr_decision);
+      paramIndex++;
+    }
+    
+    if (status) {
+      whereConditions.push(`d.status = $${paramIndex}`);
+      queryParams.push(status);
+      paramIndex++;
+    }
+    
+    if (search) {
+      whereConditions.push(`d.file_name ILIKE $${paramIndex}`);
+      queryParams.push(`%${search}%`);
+      paramIndex++;
+    }
+    
+    const whereClause = whereConditions.length > 0 
+      ? `WHERE ${whereConditions.join(' AND ')}`
+      : '';
+    
+    // Main query: JOIN documents với gdpr_compliance_results
+    const query = `
+      SELECT 
+        -- Thông tin từ bảng documents (Flow 1)
+        d.id as document_id,
+        d.processing_id,
+        d.file_name,
+        d.file_url,
+        d.cloudinary_url,
+        d.user_id,
+        d.department,
+        d.status as document_status,
+        d.analysis_results,
+        d.docx_url,
+        d.created_at as document_created_at,
+        d.updated_at as document_updated_at,
+        d.analysis_completed_at,
+        
+        -- Thông tin từ bảng gdpr_compliance_results (Flow 2) - nếu có
+        g.id as gdpr_id,
+        g.audit_id,
+        g.uploader,
+        g.gdpr_decision,
+        g.gdpr_justification,
+        g.legal_basis,
+        g.retention_days,
+        g.redaction_fields,
+        g.personal_data_found,
+        g.sensitive_data_detected,
+        g.data_volume,
+        g.notify_dpo,
+        g.status as gdpr_status,
+        g.gdpr_action_performed,
+        g.ai_decision_timestamp,
+        g.gdpr_completed_at,
+        g.workflow_source,
+        g.flow2_completed,
+        
+        -- Flag để biết có kết quả GDPR hay chưa
+        CASE WHEN g.processing_id IS NOT NULL THEN true ELSE false END as has_gdpr_result
+      FROM documents d
+      LEFT JOIN gdpr_compliance_results g ON d.processing_id = g.processing_id
+      ${whereClause}
+      ORDER BY d.created_at DESC
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
+    
+    queryParams.push(parseInt(limit), parseInt(offset));
+    
+    // Count query for pagination
+    const countQuery = `
+      SELECT COUNT(*) as count
+      FROM documents d
+      LEFT JOIN gdpr_compliance_results g ON d.processing_id = g.processing_id
+      ${whereClause}
+    `;
+    
+    const countParams = queryParams.slice(0, -2); // Remove limit and offset
+    
+    // Execute both queries in parallel
+    const [result, countResult] = await Promise.all([
+      pgPool.query(query, queryParams),
+      pgPool.query(countQuery, countParams)
+    ]);
+    
+    const total = parseInt(countResult.rows[0].count);
+    
+    // Format kết quả để dễ sử dụng ở frontend
+    const formattedResults = result.rows.map(row => ({
+      // Thông tin file cơ bản
+      id: row.document_id,
+      processing_id: row.processing_id,
+      file_name: row.file_name,
+      file_url: row.file_url,
+      cloudinary_url: row.cloudinary_url,
+      user_id: row.user_id,
+      department: row.department,
+      status: row.document_status,
+      docx_url: row.docx_url,
+      created_at: row.document_created_at,
+      updated_at: row.document_updated_at,
+      analysis_completed_at: row.analysis_completed_at,
+      
+      // Kết quả phân tích từ Flow 1
+      analysis_results: row.analysis_results,
+      
+      // Kết quả GDPR từ Flow 2 (nếu có)
+      gdpr_result: row.has_gdpr_result ? {
+        id: row.gdpr_id,
+        audit_id: row.audit_id,
+        uploader: row.uploader,
+        gdpr_decision: row.gdpr_decision,
+        gdpr_justification: row.gdpr_justification,
+        legal_basis: row.legal_basis,
+        retention_days: row.retention_days,
+        redaction_fields: row.redaction_fields,
+        personal_data_found: row.personal_data_found,
+        sensitive_data_detected: row.sensitive_data_detected,
+        data_volume: row.data_volume,
+        notify_dpo: row.notify_dpo,
+        status: row.gdpr_status,
+        gdpr_action_performed: row.gdpr_action_performed,
+        ai_decision_timestamp: row.ai_decision_timestamp,
+        gdpr_completed_at: row.gdpr_completed_at,
+        workflow_source: row.workflow_source,
+        flow2_completed: row.flow2_completed
+      } : null,
+      
+      // Flag tiện lợi
+      has_gdpr_result: row.has_gdpr_result,
+      has_analysis: !!row.analysis_results
+    }));
+    
+    console.log(`✅ Found ${formattedResults.length} documents with analysis (total: ${total})`);
+    
+    res.json({
+      success: true,
+      data: formattedResults,
+      pagination: {
+        total,
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        hasMore: (parseInt(offset) + parseInt(limit)) < total
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fetching documents with GDPR results from PostgreSQL:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch documents with GDPR results from PostgreSQL',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /gdpr/:processingId
+ * Lấy kết quả GDPR cụ thể theo processing_id (JOIN với documents)
+ */
+app.get('/gdpr/:processingId', async (req, res) => {
+  try {
+    const { processingId } = req.params;
+    
+    if (!processingId) {
+      return res.status(400).json({
+        success: false,
+        error: 'processingId is required'
+      });
+    }
+    
+    console.log(`📊 Fetching document with GDPR result from PostgreSQL: ${processingId}`);
+    
+    const query = `
+      SELECT 
+        -- Thông tin từ bảng documents (Flow 1)
+        d.id as document_id,
+        d.processing_id,
+        d.file_name,
+        d.file_url,
+        d.cloudinary_url,
+        d.user_id,
+        d.department,
+        d.status as document_status,
+        d.analysis_results,
+        d.docx_url,
+        d.created_at as document_created_at,
+        d.updated_at as document_updated_at,
+        d.analysis_completed_at,
+        
+        -- Thông tin từ bảng gdpr_compliance_results (Flow 2) - nếu có
+        g.id as gdpr_id,
+        g.audit_id,
+        g.uploader,
+        g.gdpr_decision,
+        g.gdpr_justification,
+        g.legal_basis,
+        g.retention_days,
+        g.redaction_fields,
+        g.personal_data_found,
+        g.sensitive_data_detected,
+        g.data_volume,
+        g.notify_dpo,
+        g.status as gdpr_status,
+        g.gdpr_action_performed,
+        g.ai_decision_timestamp,
+        g.gdpr_completed_at,
+        g.workflow_source,
+        g.flow2_completed
+      FROM documents d
+      LEFT JOIN gdpr_compliance_results g ON d.processing_id = g.processing_id
+      WHERE d.processing_id = $1
+      ORDER BY d.created_at DESC
+      LIMIT 1
+    `;
+    
+    const result = await pgPool.query(query, [processingId]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Document not found',
+        processingId: processingId
+      });
+    }
+    
+    const row = result.rows[0];
+    
+    // Format kết quả
+    const formattedResult = {
+      // Thông tin file cơ bản
+      id: row.document_id,
+      processing_id: row.processing_id,
+      file_name: row.file_name,
+      file_url: row.file_url,
+      cloudinary_url: row.cloudinary_url,
+      user_id: row.user_id,
+      department: row.department,
+      status: row.document_status,
+      docx_url: row.docx_url,
+      created_at: row.document_created_at,
+      updated_at: row.document_updated_at,
+      analysis_completed_at: row.analysis_completed_at,
+      
+      // Kết quả phân tích từ Flow 1
+      analysis_results: row.analysis_results,
+      
+      // Kết quả GDPR từ Flow 2 (nếu có)
+      gdpr_result: row.gdpr_id ? {
+        id: row.gdpr_id,
+        audit_id: row.audit_id,
+        uploader: row.uploader,
+        gdpr_decision: row.gdpr_decision,
+        gdpr_justification: row.gdpr_justification,
+        legal_basis: row.legal_basis,
+        retention_days: row.retention_days,
+        redaction_fields: row.redaction_fields,
+        personal_data_found: row.personal_data_found,
+        sensitive_data_detected: row.sensitive_data_detected,
+        data_volume: row.data_volume,
+        notify_dpo: row.notify_dpo,
+        status: row.gdpr_status,
+        gdpr_action_performed: row.gdpr_action_performed,
+        ai_decision_timestamp: row.ai_decision_timestamp,
+        gdpr_completed_at: row.gdpr_completed_at,
+        workflow_source: row.workflow_source,
+        flow2_completed: row.flow2_completed
+      } : null,
+      
+      has_gdpr_result: !!row.gdpr_id,
+      has_analysis: !!row.analysis_results
+    };
+    
+    console.log(`✅ Document found: ${formattedResult.file_name}`);
+    
+    res.json({
+      success: true,
+      data: formattedResult
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fetching document with GDPR result from PostgreSQL:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch document with GDPR result from PostgreSQL',
+      message: error.message
+    });
+  }
+});
+
+// ============================================
+// Approval Management API Endpoints
+// ============================================
+
+/**
+ * GET /api/approvals/list
+ * Lấy danh sách approvals từ bảng document_sharing
+ * Query params: status (ALL, PENDING, APPROVED, REJECTED)
+ */
+app.get('/api/approvals/list', async (req, res) => {
+  try {
+    const { status = 'ALL' } = req.query;
+    
+    console.log(`📊 Fetching approvals list with status: ${status}`);
+    
+    let query = `
+      SELECT 
+        sharing_id as uniqueKey,
+        processing_id,
+        file_name as documentTitle,
+        department as documentCategory,
+        user_id as uploader,
+        recipient_emails as shareWithEmails,
+        recipient_names,
+        status,
+        gdpr_decision,
+        legal_basis,
+        retention_days,
+        created_at as createdAt,
+        sharing_requested_at,
+        notes,
+        file_url as webViewLink,
+        cloudinary_url
+      FROM document_sharing
+      WHERE 1=1
+    `;
+    
+    const queryParams = [];
+    let paramIndex = 1;
+    
+    // Filter theo status
+    if (status !== 'ALL') {
+      if (status === 'PENDING') {
+        query += ` AND status = $${paramIndex}`;
+        queryParams.push('pending');
+        paramIndex++;
+      } else if (status === 'APPROVED') {
+        query += ` AND status = $${paramIndex}`;
+        queryParams.push('sent');
+        paramIndex++;
+      } else if (status === 'REJECTED') {
+        query += ` AND status = $${paramIndex}`;
+        queryParams.push('cancelled');
+        paramIndex++;
+      }
+    }
+    
+    query += ` ORDER BY created_at DESC LIMIT 100`;
+    
+    const result = await pgPool.query(query, queryParams);
+    
+    // Format approvals
+    const approvals = result.rows.map(row => ({
+      uniqueKey: row.uniquekey || row.sharing_id,
+      documentTitle: row.documenttitle || row.file_name,
+      documentCategory: row.documentcategory || row.department,
+      uploader: row.uploader || row.user_id,
+      shareWithEmails: row.sharewithemails || row.recipient_emails || [],
+      recipientNames: row.recipient_names || [],
+      status: row.status === 'pending' ? 'PENDING' : 
+              row.status === 'sent' ? 'APPROVED' : 
+              row.status === 'cancelled' ? 'REJECTED' : 'PENDING',
+      gdprDecision: row.gdpr_decision,
+      legalBasis: row.legal_basis,
+      retentionDays: row.retention_days,
+      createdAt: row.createdat || row.created_at,
+      webViewLink: row.webviewlink || row.file_url || row.cloudinary_url,
+      notes: row.notes,
+      processingId: row.processing_id
+    }));
+    
+    console.log(`✅ Found ${approvals.length} approvals`);
+    
+    res.json({
+      success: true,
+      approvals: approvals
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fetching approvals:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch approvals',
+      message: error.message,
+      approvals: [] // Trả về empty array để frontend không bị lỗi
+    });
+  }
+});
+
+/**
+ * POST /api/approvals/process
+ * Xử lý approve/reject cho approval request
+ * Body: { uniqueKey, approved: boolean, approvedBy?: string, rejectedBy?: string, reason?: string }
+ */
+app.post('/api/approvals/process', async (req, res) => {
+  try {
+    const { uniqueKey, approved, approvedBy, rejectedBy, reason } = req.body;
+    
+    if (!uniqueKey) {
+      return res.status(400).json({
+        success: false,
+        error: 'uniqueKey is required'
+      });
+    }
+    
+    if (approved === undefined) {
+      return res.status(400).json({
+        success: false,
+        error: 'approved (boolean) is required'
+      });
+    }
+    
+    console.log(`📝 Processing approval: ${uniqueKey}, approved: ${approved}`);
+    
+    // Update status trong bảng document_sharing
+    let updateQuery;
+    let queryParams;
+    
+    if (approved) {
+      updateQuery = `
+        UPDATE document_sharing
+        SET 
+          status = 'sent',
+          sharing_status = 'processing',
+          updated_at = CURRENT_TIMESTAMP,
+          notes = COALESCE(notes || E'\\n', '') || $1
+        WHERE sharing_id = $2
+        RETURNING *
+      `;
+      queryParams = [
+        `Approved by ${approvedBy || 'admin'} at ${new Date().toISOString()}`,
+        uniqueKey
+      ];
+    } else {
+      updateQuery = `
+        UPDATE document_sharing
+        SET 
+          status = 'cancelled',
+          sharing_status = 'failed',
+          updated_at = CURRENT_TIMESTAMP,
+          notes = COALESCE(notes || E'\\n', '') || $1
+        WHERE sharing_id = $2
+        RETURNING *
+      `;
+      queryParams = [
+        `Rejected by ${rejectedBy || 'admin'} at ${new Date().toISOString()}. Reason: ${reason || 'No reason provided'}`,
+        uniqueKey
+      ];
+    }
+    
+    const result = await pgPool.query(updateQuery, queryParams);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Approval not found',
+        uniqueKey: uniqueKey
+      });
+    }
+    
+    console.log(`✅ Approval ${approved ? 'approved' : 'rejected'} successfully`);
+    
+    res.json({
+      success: true,
+      message: `Approval ${approved ? 'approved' : 'rejected'} successfully`,
+      uniqueKey: uniqueKey,
+      approved: approved,
+      data: result.rows[0]
+    });
+    
+  } catch (error) {
+    console.error('❌ Error processing approval:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to process approval',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * POST /gdpr/:processingId/action
+ * Xử lý action cho file: 'send' (gửi đi), 'delete' (xóa), 'skip' (không gửi)
+ * Body: { action: 'send' | 'delete' | 'skip', recipient_emails?: string[], notes?: string }
+ */
+app.post('/gdpr/:processingId/action', async (req, res) => {
+  try {
+    const { processingId } = req.params;
+    const { action, recipient_emails, notes } = req.body;
+    
+    if (!processingId) {
+      return res.status(400).json({
+        success: false,
+        error: 'processingId is required'
+      });
+    }
+    
+    if (!action || !['send', 'delete', 'skip'].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        error: 'action is required and must be one of: send, delete, skip'
+      });
+    }
+    
+    console.log(`📊 Processing action '${action}' for document: ${processingId}`);
+    
+    // Lấy thông tin document và GDPR result
+    const getQuery = `
+      SELECT 
+        d.*,
+        g.gdpr_decision,
+        g.gdpr_justification,
+        g.legal_basis,
+        g.retention_days
+      FROM documents d
+      LEFT JOIN gdpr_compliance_results g ON d.processing_id = g.processing_id
+      WHERE d.processing_id = $1
+      LIMIT 1
+    `;
+    
+    const docResult = await pgPool.query(getQuery, [processingId]);
+    
+    if (docResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Document not found',
+        processingId: processingId
+      });
+    }
+    
+    const document = docResult.rows[0];
+    
+    // Xử lý theo action
+    if (action === 'send') {
+      // Gửi đến Flow 3 (Document Sharing)
+      if (!recipient_emails || !Array.isArray(recipient_emails) || recipient_emails.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'recipient_emails is required for send action'
+        });
+      }
+      
+      // Chuẩn bị dữ liệu để gửi đến Flow 3
+      const sharingData = {
+        processing_id: document.processing_id,
+        file_name: document.file_name,
+        file_url: document.file_url,
+        cloudinary_url: document.cloudinary_url,
+        user_id: document.user_id,
+        department: document.department,
+        recipient_emails: recipient_emails,
+        sharing_method: 'email',
+        access_level: 'viewer',
+        gdpr_decision: document.gdpr_decision || 'allow',
+        gdpr_approved: true,
+        legal_basis: document.legal_basis,
+        retention_days: document.retention_days || 30,
+        notes: notes || null
+      };
+      
+      try {
+        console.log(`📤 Sending document to Flow 3 (Document Sharing): ${FLOW2_URL}`);
+        const sharingResponse = await axios.post(FLOW2_URL, sharingData, {
+          timeout: 30000,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        console.log(`✅ Document sent to Flow 3 successfully`);
+        
+        res.json({
+          success: true,
+          message: 'Document sent to Flow 3 for sharing',
+          action: 'send',
+          processingId: processingId,
+          sharingResponse: sharingResponse.data
+        });
+      } catch (sharingError) {
+        console.error(`❌ Failed to send document to Flow 3:`, sharingError.message);
+        res.status(500).json({
+          success: false,
+          error: 'Failed to send document to Flow 3',
+          message: sharingError.message
+        });
+      }
+      
+    } else if (action === 'delete') {
+      // Xóa file (có thể chỉ đánh dấu hoặc xóa thực sự)
+      // Ở đây chúng ta sẽ đánh dấu status = 'deleted' thay vì xóa thực sự
+      const updateQuery = `
+        UPDATE documents
+        SET status = 'deleted',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE processing_id = $1
+        RETURNING *
+      `;
+      
+      const updateResult = await pgPool.query(updateQuery, [processingId]);
+      
+      console.log(`✅ Document marked as deleted: ${processingId}`);
+      
+      res.json({
+        success: true,
+        message: 'Document marked as deleted',
+        action: 'delete',
+        processingId: processingId,
+        document: updateResult.rows[0]
+      });
+      
+    } else if (action === 'skip') {
+      // Không gửi - chỉ ghi log hoặc cập nhật notes
+      const updateQuery = `
+        UPDATE documents
+        SET updated_at = CURRENT_TIMESTAMP
+        WHERE processing_id = $1
+        RETURNING *
+      `;
+      
+      await pgPool.query(updateQuery, [processingId]);
+      
+      // Có thể lưu notes vào bảng gdpr_compliance_results nếu có
+      if (notes) {
+        const updateGdprQuery = `
+          UPDATE gdpr_compliance_results
+          SET notes = $1,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE processing_id = $2
+        `;
+        await pgPool.query(updateGdprQuery, [notes, processingId]);
+      }
+      
+      console.log(`✅ Document skipped: ${processingId}`);
+      
+      res.json({
+        success: true,
+        message: 'Document skipped (not sent)',
+        action: 'skip',
+        processingId: processingId
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ Error processing action:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to process action',
       message: error.message
     });
   }

@@ -3,18 +3,48 @@
   "nodes": [
     {
       "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ (() => { try { const data = $json || {}; if (!data || typeof data !== 'object') { return { success: false, error: 'No data received', processingId: '', message: 'Error: No data from previous node', file_url: '', analysis_results: {}, api_url: '', file_name: '' }; } const processingId = (data.processingId || data.processing_id || '').toString(); const fileUrl = (data.file_url || data.cloudinary_url || '').toString(); const fileName = (data.file_name || '').toString(); const analysisResults = data.analysis_results || {}; const apiUrl = processingId ? `https://api.aidocmanageagent.io.vn/api/document/get-from-postgres/${processingId}` : ''; const result = { success: data.success !== undefined ? Boolean(data.success) : true, processingId: processingId, message: (data.message || 'Document analysis completed').toString(), file_url: fileUrl, file_name: fileName, analysis_results: analysisResults, api_url: apiUrl, note: 'Flow 2 và Flow 3 có thể gọi API này để lấy dữ liệu đầy đủ' }; return result; } catch (e) { console.error('Error in response body:', e); return { success: false, error: (e.message || 'Unknown error').toString(), processingId: '', message: 'Error processing data', file_url: '', file_name: '', analysis_results: {}, api_url: '' }; } })() }}",
+        "jsCode": "// Script để chuẩn bị dữ liệu từ Aggregate node và lưu vào Postgres\nconst aggregateData = $json; // Lấy dữ liệu trực tiếp từ Aggregate node\nconst fileData = $('Set File Data').item.json;\n\n// Chuẩn bị dữ liệu để lưu vào Postgres\nconst dataToSave = {\n  processing_id: fileData.processingId,\n  file_name: fileData.name,\n  file_url: fileData.file_url,\n  user_id: fileData.userId,\n  department: fileData.department,\n  status: 'completed',\n  analysis_results: aggregateData,\n  cloudinary_url: fileData.cloudinary_url || fileData.file_url,\n  docx_url: '', // Không có Google Docs URL\n  created_at: new Date().toISOString(),\n  updated_at: new Date().toISOString(),\n  analysis_completed_at: new Date().toISOString()\n};\n\nreturn [{\n  json: dataToSave\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2016,
+        1648
+      ],
+      "id": "71b22cc7-7cdb-4297-b95d-52956dee8208",
+      "name": "Save to Postgres Script"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Script để lấy dữ liệu từ Postgres node và format để gửi đến Flow 2 (GDPR Compliance)\n// Postgres trả về dữ liệu trong $json, có thể là array hoặc object\nlet postgresResult = $json;\n\n// Nếu là array, lấy phần tử đầu tiên\nif (Array.isArray(postgresResult)) {\n  postgresResult = postgresResult[0] || postgresResult;\n}\n\n// Nếu Postgres trả về dạng { rows: [...] }, lấy rows\nif (postgresResult && postgresResult.rows && Array.isArray(postgresResult.rows)) {\n  postgresResult = postgresResult.rows[0] || {};\n}\n\n// Lấy fileData từ Set File Data\nconst fileData = $('Set File Data').item.json;\n\n// Format dữ liệu để gửi đến Flow 2 (GDPR Compliance webhook)\n// Flow 2 cần: file info, analysis_results, processing_id, cloudinary_url, docx_url\nconst responseData = {\n  success: true,\n  processingId: postgresResult.processing_id || fileData.processingId || '',\n  message: \"Document analysis completed\",\n  // Dữ liệu chính để Flow 2 xử lý\n  data: {\n    processing_id: postgresResult.processing_id || fileData.processingId || '',\n    file_name: postgresResult.file_name || fileData.name || '',\n    file_url: postgresResult.file_url || fileData.file_url || '',\n    user_id: postgresResult.user_id || fileData.userId || '',\n    department: postgresResult.department || fileData.department || '',\n    status: postgresResult.status || 'completed',\n    analysis_results: postgresResult.analysis_results || null,\n    cloudinary_url: postgresResult.cloudinary_url || fileData.cloudinary_url || fileData.file_url || '',\n    docx_url: postgresResult.docx_url || '', // Google Docs URL\n    created_at: postgresResult.created_at || new Date().toISOString(),\n    updated_at: postgresResult.updated_at || new Date().toISOString(),\n    analysis_completed_at: postgresResult.analysis_completed_at || new Date().toISOString()\n  },\n  // Thông tin file để Flow 2 download và phân tích\n  file: {\n    name: postgresResult.file_name || fileData.name || '',\n    url: postgresResult.cloudinary_url || fileData.cloudinary_url || fileData.file_url || '',\n    cloudinary_url: postgresResult.cloudinary_url || fileData.cloudinary_url || fileData.file_url || '',\n    processingId: postgresResult.processing_id || fileData.processingId || ''\n  }\n};\n\nconsole.log('📤 Sending data to Flow 2 (GDPR Compliance):', JSON.stringify(responseData, null, 2));\n\nreturn [{\n  json: responseData\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1600,
+        1648
+      ],
+      "id": "2e2c93dd-c026-4aea-8a18-75f3fae24785",
+      "name": "Retrieve from Postgres Script"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://n8n.aidocmanageagent.io.vn/webhook/gdpr-compliance",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
         "options": {}
       },
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
-        -64,
-        1072
+        -1312,
+        1648
       ],
-      "id": "a0d41a6d-6147-4d2e-9e73-8d118f791a0f",
-      "name": "Respond to Webhook"
+      "id": "5a51adb2-f005-46be-994c-b1a4a6d9d38d",
+      "name": "Send HTTP Request to Flow 2",
+      "alwaysOutputData": false
     },
     {
       "parameters": {
@@ -28,25 +58,27 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        -2288,
-        288
+        -2272,
+        720
       ],
-      "id": "259dac9c-1c79-4021-9fc4-4f4a398ce8b6",
+      "id": "89bcf1e6-01da-4080-b74a-e9528294c4cc",
       "name": "Webhook",
       "webhookId": "8c724e88-5a5d-4919-82ba-760f48bf341f"
     },
     {
       "parameters": {
-        "jsCode": "// Lấy data từ Postgres node (đã có RETURNING *)\nconst postgresData = $json || {};\n\n// Kiểm tra nếu postgresData là undefined hoặc null\nif (!postgresData || typeof postgresData !== 'object') {\n  console.error('❌ Postgres data is invalid:', postgresData);\n  return [{\n    json: {\n      success: false,\n      processingId: '',\n      message: 'Error: Could not retrieve data from Postgres',\n      file_url: '',\n      analysis_results: {}\n    }\n  }];\n}\n\n// Extract các trường cần thiết từ Postgres response\nconst processingId = postgresData.processing_id || postgresData.processingId || '';\n\n// Lấy PDF URL từ Cloudinary (cloudinary_url hoặc file_url)\nconst fileUrl = postgresData.cloudinary_url || postgresData.file_url || '';\n\n// Lấy analysis results và flatten cấu trúc\nlet analysisResults = postgresData.analysis_results || {};\n\n// Nếu analysis_results có cấu trúc nested (data[0]), extract ra\nif (analysisResults && analysisResults.data && Array.isArray(analysisResults.data) && analysisResults.data.length > 0) {\n  const firstItem = analysisResults.data[0];\n  // Flatten cấu trúc: extract main_theme, key_takeaways, etc. từ nested structure\n  analysisResults = {\n    main_theme: firstItem.main_theme?.output?.main_theme || firstItem.main_theme?.main_theme || '',\n    document_summary: firstItem.document_summary?.output?.document_summary || firstItem.document_summary?.document_summary || [],\n    key_takeaways: firstItem.key_takeaways?.output?.key_takeaways || firstItem.key_takeaways?.key_takeaways || [],\n    gaps_and_limitations: firstItem.gaps_and_limitations?.output?.gaps_and_limitations || firstItem.gaps_and_limitations?.gaps_and_limitations || [],\n    follow_up_questions: firstItem.follow_up_questions?.output?.follow_up_questions || firstItem.follow_up_questions?.follow_up_questions || [],\n    terminology_to_clarify: firstItem.terminology_to_clarify?.output?.terminology_to_clarify || firstItem.terminology_to_clarify?.terminology_to_clarify || []\n  };\n} else if (analysisResults && typeof analysisResults === 'object') {\n  // Nếu đã là object phẳng, giữ nguyên nhưng đảm bảo có các trường cần thiết\n  analysisResults = {\n    main_theme: analysisResults.main_theme || '',\n    document_summary: analysisResults.document_summary || [],\n    key_takeaways: analysisResults.key_takeaways || [],\n    gaps_and_limitations: analysisResults.gaps_and_limitations || [],\n    follow_up_questions: analysisResults.follow_up_questions || [],\n    terminology_to_clarify: analysisResults.terminology_to_clarify || []\n  };\n}\n\nconsole.log('📊 Data from Postgres:');\nconsole.log('   Processing ID:', processingId);\nconsole.log('   File URL (PDF):', fileUrl);\nconsole.log('   Analysis Results (flattened):', JSON.stringify(analysisResults, null, 2));\n\n// Format data đầy đủ để gửi qua webhook (bao gồm tất cả trường từ PostgreSQL)\nconst fullData = {\n  success: true,\n  processingId: processingId,\n  processing_id: processingId, // Alias để tương thích\n  message: 'Document analysis completed',\n  file_name: postgresData.file_name || '',\n  file_url: fileUrl,\n  cloudinary_url: postgresData.cloudinary_url || fileUrl,\n  user_id: postgresData.user_id || '',\n  department: postgresData.department || '',\n  status: postgresData.status || 'completed',\n  analysis_results: analysisResults, // Đã được flatten\n  docx_url: postgresData.docx_url || '',\n  created_at: postgresData.created_at || '',\n  updated_at: postgresData.updated_at || '',\n  analysis_completed_at: postgresData.analysis_completed_at || ''\n};\n\nconsole.log('📤 Full data prepared for Flow 2 & Flow 3:', JSON.stringify(fullData, null, 2));\n\n// Return đầy đủ dữ liệu\nreturn [{\n  json: fullData\n}];"
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"Document processing started\",\n  \"processingId\": \"{{ $json.body.processingId || $json.processingId || 'unknown' }}\"\n}",
+        "options": {}
       },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
       "position": [
-        -288,
-        1072
+        -2064,
+        512
       ],
-      "id": "1f09c7b2-01f4-452a-b498-0a3022d8270c",
-      "name": "Get Data from Postgres"
+      "id": "772a28ff-f332-4f4d-918f-4ad9ae0294e0",
+      "name": "Respond to Webhook"
     },
     {
       "parameters": {
@@ -55,23 +87,23 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -976,
-        208
+        -2128,
+        1312
       ],
-      "id": "d677a5af-ef6d-4925-8e5c-353a87c5ada4",
+      "id": "e240ef14-1f9e-4a3f-adcf-990bc1e723c3",
       "name": "Wait Before AI"
     },
     {
       "parameters": {
-        "jsCode": "// Parse kết quả từ comprehensive_analysis node\nconst aiResult = $json.output || $json;\n\nconsole.log('Raw AI Result:', JSON.stringify(aiResult, null, 2));\n\n// Parse và format giống như 6 node cũ để tương thích với Merge node\nlet parsed = {};\n\ntry {\n  // Nếu AI trả về string, parse JSON\n  let parsedData = aiResult;\n  if (typeof aiResult === 'string') {\n    // Loại bỏ markdown code blocks nếu có\n    const cleanJson = aiResult\n      .replace(/```json/gi, '')\n      .replace(/```/g, '')\n      .trim();\n    \n    // Tìm JSON trong string\n    const jsonMatch = cleanJson.match(/\\{[\\s\\S]*\\}/);\n    if (jsonMatch) {\n      parsedData = JSON.parse(jsonMatch[0]);\n    } else {\n      parsedData = JSON.parse(cleanJson);\n    }\n  }\n  \n  // Format để tương thích với Merge node\n  parsed = {\n    // main_theme format\n    main_theme: {\n      output: {\n        main_theme: parsedData.main_theme || \"\"\n      }\n    },\n    \n    // document_summary format\n    document_summary: {\n      output: {\n        document_summary: Array.isArray(parsedData.document_summary) \n          ? parsedData.document_summary \n          : []\n      }\n    },\n    \n    // key_takeaways format\n    key_takeaways: {\n      output: {\n        key_takeaways: Array.isArray(parsedData.key_takeaways) \n          ? parsedData.key_takeaways \n          : []\n      }\n    },\n    \n    // gaps_and_limitations format\n    gaps_and_limitations: {\n      output: {\n        gaps_and_limitations: Array.isArray(parsedData.gaps_and_limitations) \n          ? parsedData.gaps_and_limitations \n          : []\n      }\n    },\n    \n    // follow_up_questions format\n    follow_up_questions: {\n      output: {\n        follow_up_questions: Array.isArray(parsedData.follow_up_questions) \n          ? parsedData.follow_up_questions \n          : []\n      }\n    },\n    \n    // terminology_to_clarify format\n    terminology_to_clarify: {\n      output: {\n        terminology_to_clarify: Array.isArray(parsedData.terminology_to_clarify) \n          ? parsedData.terminology_to_clarify \n          : []\n      }\n    }\n  };\n  \n  console.log('Parsed Result:', JSON.stringify(parsed, null, 2));\n  \n} catch (error) {\n  console.error('Error parsing AI result:', error);\n  console.error('Raw data:', aiResult);\n  \n  // Fallback với empty data\n  parsed = {\n    main_theme: { output: { main_theme: \"Error parsing AI result\" } },\n    document_summary: { output: { document_summary: [] } },\n    key_takeaways: { output: { key_takeaways: [] } },\n    gaps_and_limitations: { output: { gaps_and_limitations: [] } },\n    follow_up_questions: { output: { follow_up_questions: [] } },\n    terminology_to_clarify: { output: { terminology_to_clarify: [] } }\n  };\n}\n\n// Lấy name từ Set File Data node (với kiểm tra an toàn)\nlet fileName = '';\ntry {\n  const setFileData = $('Set File Data')?.item?.json;\n  fileName = setFileData?.name || 'Unknown Document';\n} catch (error) {\n  console.log('Could not get name from Set File Data node:', error);\n  fileName = 'Unknown Document';\n}\n\n// Return format tương thích với Merge node\nreturn [{\n  json: {\n    name: fileName,\n    main_theme: parsed.main_theme,\n    document_summary: parsed.document_summary,\n    key_takeaways: parsed.key_takeaways,\n    gaps_and_limitations: parsed.gaps_and_limitations,\n    follow_up_questions: parsed.follow_up_questions,\n    terminology_to_clarify: parsed.terminology_to_clarify\n  }\n}];"
+        "jsCode": "// Parse kết quả từ comprehensive_analysis node\nconst aiResult = $json.output || $json;\n\nconsole.log('Raw AI Result:', JSON.stringify(aiResult, null, 2));\n\n// Parse và format giống như 6 node cũ để tương thích với Merge node\nlet parsed = {};\n\ntry {\n  // Nếu AI trả về string, parse JSON\n  let parsedData = aiResult;\n  if (typeof aiResult === 'string') {\n    // Loại bỏ markdown code blocks nếu có\n    const cleanJson = aiResult\n      .replace(/```json/gi, '')\n      .replace(/```/g, '')\n      .trim();\n    \n    // Tìm JSON trong string\n    const jsonMatch = cleanJson.match(/\\{[\\s\\S]*\\}/);\n    if (jsonMatch) {\n      parsedData = JSON.parse(jsonMatch[0]);\n    } else {\n      parsedData = JSON.parse(cleanJson);\n    }\n  }\n  \n  // Format để tương thích với Merge node\n  parsed = {\n    // main_theme format\n    main_theme: {\n      output: {\n        main_theme: parsedData.main_theme || \"\"\n      }\n    },\n    \n    // document_summary format\n    document_summary: {\n      output: {\n        document_summary: Array.isArray(parsedData.document_summary) \n          ? parsedData.document_summary \n          : []\n      }\n    },\n    \n    // key_takeaways format\n    key_takeaways: {\n      output: {\n        key_takeaways: Array.isArray(parsedData.key_takeaways) \n          ? parsedData.key_takeaways \n          : []\n      }\n    },\n    \n    // gaps_and_limitations format\n    gaps_and_limitations: {\n      output: {\n        gaps_and_limitations: Array.isArray(parsedData.gaps_and_limitations) \n          ? parsedData.gaps_and_limitations \n          : []\n      }\n    },\n    \n    // follow_up_questions format\n    follow_up_questions: {\n      output: {\n        follow_up_questions: Array.isArray(parsedData.follow_up_questions) \n          ? parsedData.follow_up_questions \n          : []\n      }\n    },\n    \n    // terminology_to_clarify format\n    terminology_to_clarify: {\n      output: {\n        terminology_to_clarify: Array.isArray(parsedData.terminology_to_clarify) \n          ? parsedData.terminology_to_clarify \n          : []\n      }\n    }\n  };\n  \n  console.log('Parsed Result:', JSON.stringify(parsed, null, 2));\n  \n} catch (error) {\n  console.error('Error parsing AI result:', error);\n  console.error('Raw data:', aiResult);\n  \n  // Fallback với empty data\n  parsed = {\n    main_theme: { output: { main_theme: \"Error parsing AI result\" } },\n    document_summary: { output: { document_summary: [] } },\n    key_takeaways: { output: { key_takeaways: [] } },\n    gaps_and_limitations: { output: { gaps_and_limitations: [] } },\n    follow_up_questions: { output: { follow_up_questions: [] } },\n    terminology_to_clarify: { output: { terminology_to_clarify: [] } }\n  };\n}\n\n// Return format tương thích với Merge node\nreturn [{\n  json: {\n    name: $('Set File Data').item.json.name,\n    main_theme: parsed.main_theme,\n    document_summary: parsed.document_summary,\n    key_takeaways: parsed.key_takeaways,\n    gaps_and_limitations: parsed.gaps_and_limitations,\n    follow_up_questions: parsed.follow_up_questions,\n    terminology_to_clarify: parsed.terminology_to_clarify\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -432,
-        192
+        -1584,
+        1296
       ],
-      "id": "3cd4d211-1a6e-4131-b312-78dbbdb4f591",
+      "id": "f6a01693-9f6d-46b0-81a2-235890fe6f8e",
       "name": "Parse Combined Result"
     },
     {
@@ -80,16 +112,16 @@
         "text": "=**Document Title:** {{ $('Set File Data').item.json.name }}\n\n**Document Text:** {{ $json.text }}",
         "hasOutputParser": true,
         "options": {
-          "systemMessage": "=YOU ARE A COMPREHENSIVE DOCUMENT ANALYSIS AGENT. YOU MUST ANALYZE A DOCUMENT AND OUTPUT ALL ANALYSIS RESULTS IN A SINGLE JSON OBJECT.\n\nYOUR TASK:\n1. Identify the main theme and purpose\n2. Create a section-by-section summary\n3. Extract key takeaways\n4. Identify gaps and limitations\n5. Generate follow-up questions\n6. Clarify terminology\n\nOUTPUT FORMAT (MANDATORY JSON):\n{\n  \"main_theme\": \"Three sentences: topic, purpose, audience\",\n  \"document_summary\": [\n    {\n      \"section_title\": \"Section title\",\n      \"content\": \"Section summary\"\n    }\n  ],\n  \"key_takeaways\": [\n    {\n      \"point\": \"Key point\",\n      \"context\": \"Explanation\"\n    }\n  ],\n  \"gaps_and_limitations\": [\n    {\n      \"issue\": \"Gap description\",\n      \"reason\": \"Why it matters\"\n    }\n  ],\n  \"follow_up_questions\": [\n    \"Question 1\",\n    \"Question 2\"\n  ],\n  \"terminology_to_clarify\": [\n    {\n      \"term\": \"Term\",\n      \"explanation\": \"Definition\"\n    }\n  ]\n}\n\nREQUIREMENTS:\n- Return ONLY valid JSON, no markdown code blocks (no ```json)\n- All fields are required\n- Be specific and accurate\n- main_theme: 3 sentences (topic, purpose, audience)\n- document_summary: Array of sections with title and content\n- key_takeaways: 3-7 items with point and context\n- gaps_and_limitations: 1-5 items with issue and reason\n- follow_up_questions: 3-7 open-ended questions\n- terminology_to_clarify: Array of terms with explanations\n\nIMPORTANT:\n- Do NOT wrap output in markdown code blocks\n- Output must be valid JSON that can be parsed directly\n- All arrays must have at least 1 item\n- Be concise but informative"
+          "systemMessage": "=YOU ARE A COMPREHENSIVE DOCUMENT ANALYSIS AGENT. YOU MUST ANALYZE A DOCUMENT AND EXTRACT ALL INFORMATION ACCURATELY, THEN OUTPUT ALL ANALYSIS RESULTS IN A SINGLE JSON OBJECT.\n\nYOUR TASK:\n1. CAREFULLY READ AND EXTRACT ALL INFORMATION from the document text (names, numbers, emails, IDs, passwords, dates, addresses, etc.)\n2. Identify the main theme and purpose of the document\n3. Create a detailed section-by-section summary with ALL extracted data\n4. Extract key takeaways including all personal information found\n5. Identify gaps and limitations (missing information)\n6. Generate relevant follow-up questions based on document type\n7. Clarify any terminology or abbreviations found\n\nCRITICAL EXTRACTION RULES:\n- Extract ALL personal information: names, phone numbers, emails, IDs (CCCD/CMND), passwords, addresses, dates\n- Extract ALL numbers, codes, and identifiers exactly as they appear\n- Extract ALL dates and timestamps\n- Preserve exact formatting and spelling\n- Do NOT modify or summarize extracted data - use exact values\n- If information is missing, note it in gaps_and_limitations\n\nOUTPUT FORMAT (MANDATORY JSON):\n{\n  \"main_theme\": \"Three sentences describing: document type/topic, purpose/use case, target audience/who it's for\",\n  \"document_summary\": [\n    {\n      \"section_title\": \"Exact section name or field name from document\",\n      \"content\": \"Detailed summary including ALL extracted values. For example: 'Họ và Tên: Trần Hà Duy, Số điện thoại: 0967125575, Email: haduy@gmail.com' - include ALL fields and their values\"\n    }\n  ],\n  \"key_takeaways\": [\n    {\n      \"point\": \"Specific information extracted (e.g., 'Personal identification information found', 'Contact details provided')\",\n      \"context\": \"Detailed explanation with actual values extracted (e.g., 'Document contains: Name: Trần Hà Duy, Phone: 0967125575, Email: haduy@gmail.com, CCCD: 03949582948')\"\n    }\n  ],\n  \"gaps_and_limitations\": [\n    {\n      \"issue\": \"Missing information or incomplete data (e.g., 'Missing address', 'No date of birth provided')\",\n      \"reason\": \"Why this gap matters or what impact it has\"\n    }\n  ],\n  \"follow_up_questions\": [\n    \"Relevant question based on document type (e.g., 'Is this information for account registration?', 'What is the purpose of collecting this personal data?')\"\n  ],\n  \"terminology_to_clarify\": [\n    {\n      \"term\": \"Term or abbreviation found (e.g., 'CCCD', 'CMND')\",\n      \"explanation\": \"Definition or meaning of the term\"\n    }\n  ]\n}\n\nREQUIREMENTS:\n- Return ONLY valid JSON, no markdown code blocks (no ```json)\n- All fields are required\n- Be SPECIFIC and ACCURATE - include actual extracted values in summaries\n- main_theme: 3 sentences describing document type, purpose, and audience\n- document_summary: Array of sections - each section MUST include ALL extracted data from that section with exact values\n- key_takeaways: 3-7 items - each MUST reference actual extracted information with values\n- gaps_and_limitations: 1-5 items - identify what information is missing\n- follow_up_questions: 3-7 relevant questions based on document content\n- terminology_to_clarify: Array of terms/abbreviations found with explanations\n\nIMPORTANT:\n- Do NOT wrap output in markdown code blocks\n- Output must be valid JSON that can be parsed directly\n- All arrays must have at least 1 item\n- Include ALL extracted information in document_summary and key_takeaways\n- Be detailed and comprehensive - do not summarize away important data\n- Preserve exact values from the document (names, numbers, emails, etc.)"
         }
       },
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 2,
       "position": [
-        -768,
-        224
+        -1904,
+        1328
       ],
-      "id": "65c45eb0-278e-4ecd-aaf9-ef7595532f0f",
+      "id": "569e579b-069b-4a70-a4c8-1853e3ec2485",
       "name": "comprehensive_analysis",
       "settings": {
         "errorHandling": {
@@ -104,16 +136,16 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "=INSERT INTO documents (processing_id, file_name, file_url, user_id, department, status, analysis_results, cloudinary_url, created_at, updated_at, analysis_completed_at) VALUES ('{{ $json.processingId }}', '{{ $json.file_name }}', '{{ $json.file_url }}', '{{ $json.user_id }}', '{{ $json.department }}', '{{ $json.status }}', '{{ JSON.stringify($json.analysis_results).replace(/'/g, \"''\") }}'::jsonb, '{{ $json.cloudinary_url }}', NOW(), NOW(), NOW()) ON CONFLICT (processing_id) DO UPDATE SET status = EXCLUDED.status, analysis_results = EXCLUDED.analysis_results, cloudinary_url = EXCLUDED.cloudinary_url, updated_at = NOW(), analysis_completed_at = NOW() RETURNING *;",
+        "query": "=INSERT INTO documents (processing_id, file_name, file_url, user_id, department, status, analysis_results, cloudinary_url, docx_url, created_at, updated_at, analysis_completed_at) VALUES ('{{ $json.processing_id }}', '{{ $json.file_name }}', '{{ $json.file_url }}', '{{ $json.user_id }}', '{{ $json.department }}', '{{ $json.status }}', '{{ JSON.stringify($json.analysis_results).replace(/'/g, \"''\") }}'::jsonb, '{{ $json.cloudinary_url }}', '{{ $json.docx_url || '' }}', '{{ $json.created_at }}'::timestamp, '{{ $json.updated_at }}'::timestamp, '{{ $json.analysis_completed_at }}'::timestamp) ON CONFLICT (processing_id) DO UPDATE SET status = EXCLUDED.status, analysis_results = EXCLUDED.analysis_results, cloudinary_url = EXCLUDED.cloudinary_url, docx_url = COALESCE(NULLIF(EXCLUDED.docx_url, ''), documents.docx_url), updated_at = EXCLUDED.updated_at::timestamp, analysis_completed_at = EXCLUDED.analysis_completed_at::timestamp RETURNING *;",
         "options": {}
       },
-      "id": "5804a6eb-6fa4-46f2-9f1c-769d6a8678f0",
+      "id": "3f4ba535-0b6f-4e79-9560-d09a34fe4b19",
       "name": "Save Analysis to Postgres",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
       "position": [
-        -512,
-        1072
+        -1808,
+        1648
       ],
       "credentials": {
         "postgres": {
@@ -130,24 +162,11 @@
       "type": "n8n-nodes-base.aggregate",
       "typeVersion": 1,
       "position": [
-        -752,
-        688
+        -2256,
+        1648
       ],
-      "id": "8295c48f-ddbe-4b56-a4be-e84ef22146ae",
+      "id": "071863e0-b7e3-4c76-a486-177758883036",
       "name": "Aggregate"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Format dữ liệu từ Aggregate và Set File Data để lưu vào Postgres\n// Lấy dữ liệu phân tích từ Aggregate node\nconst aggregateData = $json || {};\n\n// Lấy thông tin file từ Set File Data node\nconst setFileData = $('Set File Data')?.item?.json || {};\n\n// Lấy PDF URL từ Cloudinary (file_url hoặc cloudinary_url)\nconst pdfUrl = setFileData.cloudinary_url || setFileData.file_url || '';\n\n// Lấy các thông tin cần thiết\nconst processingId = setFileData.processingId || '';\nconst fileName = setFileData.name || 'Unknown Document';\nconst userId = setFileData.userId || '';\nconst department = setFileData.department || '';\n\n// Format analysis results từ Aggregate\n// Aggregate có thể có cấu trúc khác nhau, cần xử lý linh hoạt\nlet analysisResults = {};\n\n// Thử lấy từ nhiều cấu trúc khác nhau\nif (aggregateData.main_theme) {\n  analysisResults = {\n    main_theme: aggregateData.main_theme?.output?.main_theme || aggregateData.main_theme || '',\n    document_summary: aggregateData.document_summary?.output?.document_summary || aggregateData.document_summary || [],\n    key_takeaways: aggregateData.key_takeaways?.output?.key_takeaways || aggregateData.key_takeaways || [],\n    gaps_and_limitations: aggregateData.gaps_and_limitations?.output?.gaps_and_limitations || aggregateData.gaps_and_limitations || [],\n    follow_up_questions: aggregateData.follow_up_questions?.output?.follow_up_questions || aggregateData.follow_up_questions || [],\n    terminology_to_clarify: aggregateData.terminology_to_clarify?.output?.terminology_to_clarify || aggregateData.terminology_to_clarify || []\n  };\n} else {\n  // Nếu không có cấu trúc nested, dùng trực tiếp\n  analysisResults = aggregateData;\n}\n\nconsole.log('📊 Formatting data for Postgres:');\nconsole.log('   Processing ID:', processingId);\nconsole.log('   File Name:', fileName);\nconsole.log('   PDF URL:', pdfUrl);\nconsole.log('   Analysis Results:', JSON.stringify(analysisResults, null, 2));\n\n// Return dữ liệu đã format\nreturn [{\n  json: {\n    processingId: processingId,\n    file_name: fileName,\n    file_url: pdfUrl,\n    cloudinary_url: pdfUrl, // PDF URL từ Cloudinary\n    user_id: userId,\n    department: department,\n    analysis_results: analysisResults,\n    status: 'completed'\n  }\n}];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -512,
-        688
-      ],
-      "id": "format-data-for-postgres",
-      "name": "Format Data for Postgres"
     },
     {
       "parameters": {
@@ -156,23 +175,23 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.1,
       "position": [
-        -1008,
-        608
+        -2432,
+        1568
       ],
-      "id": "5b6811f5-6e3a-400b-ac1a-d55f048bb904",
+      "id": "d72778f1-99ec-4a33-8728-567c17cff5f1",
       "name": "Merge"
     },
     {
       "parameters": {
-        "jsonSchemaExample": "{\n  \"main_theme\": \"Three sentences: topic, purpose, audience\",\n  \"document_summary\": [\n    {\n      \"section_title\": \"Section title\",\n      \"content\": \"Section summary\"\n    }\n  ],\n  \"key_takeaways\": [\n    {\n      \"point\": \"Key point\",\n      \"context\": \"Explanation\"\n    }\n  ],\n  \"gaps_and_limitations\": [\n    {\n      \"issue\": \"Gap description\",\n      \"reason\": \"Why it matters\"\n    }\n  ],\n  \"follow_up_questions\": [\n    \"Question 1\",\n    \"Question 2\"\n  ],\n  \"terminology_to_clarify\": [\n    {\n      \"term\": \"Term\",\n      \"explanation\": \"Definition\"\n    }\n  ]\n}"
+        "jsonSchemaExample": "{\n  \"main_theme\": \"Document type and content overview in three sentences: (1) What type of document this is and its primary topic, (2) The main purpose or objective of the document, (3) Who the intended audience or users are. Example: 'This is a business contract document outlining service terms and conditions. Its purpose is to establish legal obligations between parties. The target audience includes legal teams, business managers, and involved stakeholders.'\",\n  \"document_summary\": [\n    {\n      \"section_title\": \"Section or category name from the document (e.g., 'Introduction', 'Terms and Conditions', 'Personal Information', 'Financial Summary', 'Technical Specifications')\",\n      \"content\": \"Detailed summary of this section including ALL extracted data, values, dates, names, numbers, and key information. For personal info: 'Họ và Tên: Trần Hà Duy, Số điện thoại: 0967125575, Email: haduy@gmail.com'. For contracts: 'Parties: Company A and Company B, Contract Date: 2024-01-15, Duration: 12 months, Value: $50,000'. For reports: 'Report covers Q1 2024 performance, Revenue: $1.2M, Growth: 15%, Key metrics: 250 customers, 95% satisfaction'.\"\n    }\n  ],\n  \"key_takeaways\": [\n    {\n      \"point\": \"Main finding or important information extracted (e.g., 'Contract value and duration', 'Personal identification data found', 'Financial performance metrics', 'Technical requirements specified')\",\n      \"context\": \"Detailed explanation with actual extracted values. Examples: 'Document contains contract between Company A and B valued at $50,000 for 12 months starting 2024-01-15' OR 'Document contains personal information: Name: Trần Hà Duy, Phone: 0967125575, Email: haduy@gmail.com, CCCD: 03949582948' OR 'Q1 2024 report shows revenue of $1.2M with 15% growth and 250 active customers'\"\n    },\n    {\n      \"point\": \"Another important finding or data point\",\n      \"context\": \"Detailed explanation with specific values and context\"\n    },\n    {\n      \"point\": \"Additional key information or insight\",\n      \"context\": \"Detailed explanation with extracted data\"\n    }\n  ],\n  \"gaps_and_limitations\": [\n    {\n      \"issue\": \"Missing or incomplete information identified (e.g., 'Missing signature date', 'No contact address provided', 'Incomplete financial breakdown', 'Unclear technical specifications')\",\n      \"reason\": \"Why this gap matters or what impact it has (e.g., 'Signature date is required for contract validity' OR 'Address needed for complete profile' OR 'Financial breakdown needed for budget planning')\"\n    },\n    {\n      \"issue\": \"Another limitation or missing information\",\n      \"reason\": \"Explanation of why this matters\"\n    }\n  ],\n  \"follow_up_questions\": [\n    \"Relevant question based on document type and content. For personal info: 'What is the purpose of collecting this personal information?' For contracts: 'What are the key terms and obligations?' For reports: 'What are the main performance indicators?' For technical docs: 'What are the technical requirements and specifications?'\",\n    \"Another relevant question based on document content\",\n    \"Additional question to clarify or understand the document better\",\n    \"Question about data security, compliance, or next steps if applicable\"\n  ],\n  \"terminology_to_clarify\": [\n    {\n      \"term\": \"Technical term, abbreviation, or specialized vocabulary found in document (e.g., 'CCCD', 'GDPR', 'SLA', 'ROI', 'API', 'NDA')\",\n      \"explanation\": \"Clear definition or explanation of the term. Example: 'CCCD - Căn cước công dân, Vietnamese Citizen ID Card' OR 'SLA - Service Level Agreement, defines expected service performance' OR 'GDPR - General Data Protection Regulation, EU data privacy law'\"\n    }\n  ]\n}"
       },
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.2,
       "position": [
-        -608,
-        80
+        -1760,
+        1184
       ],
-      "id": "e57793a1-fbb2-4bf5-b506-54324068d590",
+      "id": "b33d0da6-81c5-4570-94da-b6ab04310107",
       "name": "Structured Output Parser - Comprehensive"
     },
     {
@@ -182,10 +201,10 @@
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        -1664,
-        272
+        -1648,
+        704
       ],
-      "id": "775f4109-9933-4101-a0eb-ca11488d2260",
+      "id": "fbce9a2a-c446-4542-8228-fb2f7149de78",
       "name": "2nd Loop Over Items"
     },
     {
@@ -195,10 +214,10 @@
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        -2016,
-        288
+        -1984,
+        720
       ],
-      "id": "f89eac80-2c18-477f-a887-5a5fbcf1e708",
+      "id": "9b34b150-f5fd-4abd-b158-abfa3fd45f21",
       "name": "Loop Over Items"
     },
     {
@@ -212,13 +231,13 @@
           }
         }
       },
-      "id": "d96005fa-f6cd-4d3e-b696-e8439099ba79",
+      "id": "24083e37-b21f-47ed-90ed-0c4ff33e0622",
       "name": "Download File From URL",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -1440,
-        288
+        -1424,
+        720
       ]
     },
     {
@@ -266,18 +285,24 @@
               "name": "cloudinary_public_id",
               "value": "={{ $json.body.file.cloudinary_public_id || $json.file.cloudinary_public_id }}",
               "type": "string"
+            },
+            {
+              "id": "b8c9d0e1-2345-6789-012a-bcdef0123456",
+              "name": "webhook_url",
+              "value": "={{ $json.body.webhook_url || $json.webhook_url || '' }}",
+              "type": "string"
             }
           ]
         },
         "options": {}
       },
-      "id": "46ce0a72-af2f-4749-a8f3-9171e51f990e",
+      "id": "4e9c4a57-3f02-4dfb-9adc-266201a1f6d5",
       "name": "Set File Data",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -1888,
-        432
+        -1824,
+        864
       ]
     },
     {
@@ -285,13 +310,13 @@
         "operation": "pdf",
         "options": {}
       },
-      "id": "9cb42a31-f7aa-4fbc-847b-aa1867f21347",
+      "id": "7033b920-b992-43cf-b470-0bb5a53d3c5a",
       "name": "Extract PDF Text",
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1,
       "position": [
-        -1216,
-        288
+        -1200,
+        720
       ]
     },
     {
@@ -301,35 +326,918 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        -768,
-        80
+        -1920,
+        1184
       ],
-      "id": "ac144b52-5df7-4811-92d0-1fcd7da46ff5",
+      "id": "f5d1f02b-676a-4576-8f91-bf18b2ba54ac",
       "name": "Google Gemini Chat Model",
       "credentials": {
         "googlePalmApi": {
-          "id": "lcV9ZKXO35qhNqk7",
-          "name": "Google Gemini(PaLM) Api account 6"
+          "id": "xGgK6hMSasvuPMXj",
+          "name": "Google Gemini(PaLM) Api account 5"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "Dang Hong Nguyen - Analyze",
+        "height": 1472,
+        "width": 1728
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2592,
+        368
+      ],
+      "typeVersion": 1,
+      "id": "adc96094-45c2-4b8c-b67b-4bd5cb79c621",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "### LUỒNG 2: AI DOCUMENT MANAGEMENT AGENT – GDPR COMPLIANCE (Fixed Clean)\n\n**Mục đích:** Tự động kiểm tra tuân thủ GDPR cho tài liệu.\n\n**Tính năng chính:**\n• AI quyết định hành động GDPR (delete/anonymize/allow)\n• Xác định legal basis, DSR, retention\n• Tự động thông báo DPO khi cần\n• Ghi log và audit trail đầy đủ.\n\n**Cải tiến:**\n• Sửa lỗi phân nhánh If/Else chuẩn.\n• Thêm Merge node để hợp nhất các nhánh hành động."
+      },
+      "name": "📋 Mô tả Luồng GDPR",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -384,
+        352
+      ],
+      "id": "4b5912dd-3f90-4ead-9d60-8da39f68d0b7"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 🧩 Chuẩn hóa dữ liệu đầu vào cho kiểm tra GDPR\n// Hỗ trợ nhiều cấu trúc dữ liệu: document analyzer response, direct webhook, Google Drive trigger\nconst input = $json ?? {};\nconst body = input.body ?? {};\n\n// 🔍 Debug: Log input structure\nconsole.log('📥 Input structure:', JSON.stringify(input, null, 2).substring(0, 500));\n\n// 🔍 Parse webhook response từ document analyzer (cấu trúc mới)\nlet webhookData = null;\nlet processingId = null;\nlet cloudinaryUrl = null;\nlet fileUrl = null;\nlet fileName = null;\nlet userId = null;\nlet department = null;\nlet analysisResults = null;\nlet fileSize = null;\nlet mimeType = null;\nlet fileId = null;\n\n// ============================================\n// CASE 1: Document Analyzer Response (có success, processingId, data)\n// ============================================\nif (input.success !== undefined || body.success !== undefined) {\n  const response = input.success !== undefined ? input : body;\n  \n  // Lấy processingId\n  processingId = response.processingId || response.data?.processing_id || response.processing_id || null;\n  \n  // Lấy thông tin file từ data object\n  if (response.data) {\n    fileUrl = response.data.file_url || null;\n    cloudinaryUrl = response.data.cloudinary_url || response.data.file_url || null;\n    fileName = response.data.file_name || null;\n    userId = response.data.user_id || null;\n    department = response.data.department || null;\n    analysisResults = response.data.analysis_results || null;\n  }\n  \n  webhookData = response;\n  console.log('✅ Parsed webhook response from document analyzer');\n  console.log('   Processing ID:', processingId);\n  console.log('   Cloudinary URL:', cloudinaryUrl);\n  console.log('   File Name:', fileName);\n}\n\n// ============================================\n// CASE 2: Direct webhook với body.file (từ hình ảnh)\n// ============================================\n// Luôn kiểm tra body.file nếu có, hoặc nếu chưa có processingId và cloudinaryUrl\nif (body.file || (!processingId && !cloudinaryUrl)) {\n  // Lấy từ body.file (nếu có)\n  if (body.file) {\n    fileName = fileName || body.file.name || null;\n    fileSize = body.file.size || null;\n    mimeType = body.file.mimeType || body.file.mime_type || null;\n    // QUAN TRỌNG: Lấy cloudinary_url từ body.file\n    cloudinaryUrl = cloudinaryUrl || body.file.cloudinary_url || body.file.url || body.file.cloudinaryUrl || null;\n    fileUrl = fileUrl || cloudinaryUrl || null;\n    console.log('✅ Found file info in body.file');\n    console.log('   File Name:', fileName);\n    console.log('   File Size:', fileSize);\n    console.log('   MIME Type:', mimeType);\n    console.log('   Cloudinary URL:', cloudinaryUrl);\n  }\n  \n  // Lấy processingId từ nhiều nguồn\n  processingId = processingId || \n    input.processingId || \n    body.processingId || \n    input.processing_id || \n    body.processing_id || \n    null;\n  \n  // Lấy cloudinary_url từ nhiều nguồn\n  cloudinaryUrl = cloudinaryUrl || \n    input.cloudinary_url || \n    body.cloudinary_url || \n    input.cloudinaryUrl || \n    body.cloudinaryUrl || \n    input.file_url || \n    body.file_url || \n    null;\n  \n  // Lấy file_url\n  fileUrl = fileUrl || cloudinaryUrl || null;\n  \n  // Lấy user_id\n  userId = userId || \n    input.user_id || \n    body.user_id || \n    input.userId || \n    body.userId || \n    null;\n  \n  // Lấy department\n  department = department || \n    input.department || \n    body.department || \n    null;\n  \n  // Lấy analysis_results\n  analysisResults = analysisResults || \n    input.analysis_results || \n    body.analysis_results || \n    null;\n}\n\n// ============================================\n// CASE 3: Google Drive Trigger (fallback)\n// ============================================\nif (!fileUrl && !cloudinaryUrl) {\n  try {\n    fileId = input.id || body.id || null;\n    fileName = fileName || input.name || body.name || null;\n    fileSize = fileSize || input.size || body.size || null;\n    mimeType = mimeType || input.mimeType || body.mimeType || null;\n    \n    // Tạo URL Google Drive\n    if (fileId) {\n      fileUrl = `https://drive.google.com/file/d/${fileId}/view`;\n      console.log('✅ Using Google Drive file info');\n    }\n  } catch (e) {\n    console.warn('⚠️ Lỗi khi xử lý thông tin Google Drive:', e.message);\n  }\n}\n\n// 🔍 Thử lấy email của chủ sở hữu từ output Google Drive Trigger (fallback)\nlet ownerEmail = null;\ntry {\n  ownerEmail =\n    input.owners?.[0]?.emailAddress ||\n    body.owners?.[0]?.emailAddress ||\n    input.lastModifyingUser?.emailAddress ||\n    userId || // Dùng user_id từ webhook nếu có\n    null;\n} catch (e) {\n  ownerEmail = null;\n}\n\n// 🧱 Format file size nếu có\nlet formattedFileSize = '1.0MB';\nif (fileSize) {\n  if (typeof fileSize === 'number') {\n    // Convert bytes to readable format\n    if (fileSize < 1024) {\n      formattedFileSize = `${fileSize}B`;\n    } else if (fileSize < 1024 * 1024) {\n      formattedFileSize = `${(fileSize / 1024).toFixed(2)}KB`;\n    } else {\n      formattedFileSize = `${(fileSize / (1024 * 1024)).toFixed(2)}MB`;\n    }\n  } else {\n    formattedFileSize = fileSize.toString();\n  }\n}\n\n// 🧱 Dữ liệu mẫu (fallback khi thiếu input)\nconst defaultData = {\n  documentTitle: fileName || 'Tài liệu mẫu - GDPR Check',\n  documentCategory: 'Nhân sự',\n  documentSummary: analysisResults?.data?.[0]?.document_summary?.output?.[0]?.content || \n                   analysisResults?.document_summary || \n                   'Tài liệu chứa dữ liệu cá nhân cần kiểm tra GDPR',\n  originalFileId: processingId || fileId || 'sample_file_gdpr',\n  fileSize: formattedFileSize,\n  uploadDate: new Date().toISOString(),\n  uploader: ownerEmail || userId || 'privacy@company.com',\n  hasPersonalInfo: true,\n  containsSpecialCategoryData: false,\n  dataSubjectRequest: null,\n  legalBasis: null\n};\n\n// 🧠 Gộp dữ liệu: Ưu tiên parsed values → input → body → mặc định\nconst merged = {\n  documentTitle: fileName || input.documentTitle || body.documentTitle || defaultData.documentTitle,\n  documentCategory: input.documentCategory || body.documentCategory || defaultData.documentCategory,\n  documentSummary: input.documentSummary || body.documentSummary || defaultData.documentSummary,\n  originalFileId: processingId || fileId || input.originalFileId || body.originalFileId || defaultData.originalFileId,\n  fileSize: formattedFileSize || input.fileSize || body.fileSize || defaultData.fileSize,\n  uploadDate: input.uploadDate || body.uploadDate || defaultData.uploadDate,\n  uploader: ownerEmail || userId || input.uploader || body.uploader || defaultData.uploader,\n  hasPersonalInfo: input.hasPersonalInfo ?? body.hasPersonalInfo ?? defaultData.hasPersonalInfo,\n  containsSpecialCategoryData: input.containsSpecialCategoryData ?? body.containsSpecialCategoryData ?? defaultData.containsSpecialCategoryData,\n  dataSubjectRequest: input.dataSubjectRequest ?? body.dataSubjectRequest ?? defaultData.dataSubjectRequest,\n  legalBasis: input.legalBasis ?? body.legalBasis ?? defaultData.legalBasis\n};\n\n// 🧾 Thêm metadata hệ thống và thông tin file\nconst result = {\n  receivedAt: new Date().toISOString(),\n  workflowSource: 'gdpr-compliance',\n  processingTimestamp: new Date().toISOString(),\n  // 🔗 Thông tin file từ Cloudinary/webhook\n  fileUrl: fileUrl || cloudinaryUrl || null,\n  cloudinaryUrl: cloudinaryUrl || fileUrl || null, // Cloudinary URL để download\n  fileId: fileId || processingId || null,\n  fileName: fileName || null,\n  mimeType: mimeType || null,\n  processingId: processingId || null, // Processing ID từ document analyzer\n  userId: userId || null,\n  department: department || null,\n  analysisResults: analysisResults || null, // Kết quả phân tích từ document analyzer\n  // 📊 Thông tin Google Drive gốc (nếu có)\n  googleDriveInfo: fileId ? {\n    id: fileId,\n    name: fileName,\n    size: fileSize,\n    mimeType: mimeType,\n    url: fileUrl,\n    owners: input.owners || body.owners || null,\n    lastModifyingUser: input.lastModifyingUser || body.lastModifyingUser || null\n  } : null,\n  // 📋 Webhook data gốc (nếu có)\n  webhookData: webhookData || (Object.keys(input).length > 0 ? input : null),\n  ...merged\n};\n\n// 🔍 Debug: Log kết quả cuối cùng\nconsole.log('✅ Normalized data result:');\nconsole.log('   Processing ID:', result.processingId);\nconsole.log('   File Name:', result.fileName);\nconsole.log('   Cloudinary URL:', result.cloudinaryUrl);\nconsole.log('   File URL:', result.fileUrl);\nconsole.log('   User ID:', result.userId);\nconsole.log('   MIME Type:', result.mimeType);\n\n// 🧹 Dọn undefined/null\nfor (const key in result) {\n  if (result[key] === undefined) result[key] = null;\n  if (typeof result[key] === 'string') result[key] = result[key].trim();\n}\n\n// ✅ Trả ra JSON hoàn chỉnh\nreturn [{ json: result }];\n"
+      },
+      "name": "2️⃣ Chuẩn hóa dữ liệu đầu vào",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16,
+        720
+      ],
+      "id": "caa46724-2740-4c54-b3ec-146b53f7915b"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.cloudinaryUrl || $json.fileUrl }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "name": "2.5️⃣ Download File từ Cloudinary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        112,
+        720
+      ],
+      "id": "5edcb9be-844d-47ba-88f5-9ea4af9abe54",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// 🔗 Merge file binary data với JSON data từ normalization node\n// Lấy dữ liệu từ normalization node (node đầu tiên trong input chain)\nlet normalizedData = {};\ntry {\n  // Thử lấy từ node normalization trực tiếp\n  normalizedData = $('2️⃣ Chuẩn hóa dữ liệu đầu vào').item.json || {};\n} catch (e) {\n  // Fallback: lấy từ input items\n  const inputItems = $input.all();\n  if (inputItems.length > 0) {\n    normalizedData = inputItems[0].json || {};\n  }\n  // Nếu vẫn không có, dùng $json hiện tại\n  if (Object.keys(normalizedData).length === 0) {\n    normalizedData = $json || {};\n  }\n}\n\n// Lấy binary data từ HTTP Request (file download)\nconst binaryData = $binary?.data || null;\n\n// Merge dữ liệu - giữ nguyên tất cả data từ normalization\nconst result = {\n  ...normalizedData,\n  // Thông tin file đã download\n  fileDownloaded: !!binaryData,\n  fileDownloadTimestamp: binaryData ? new Date().toISOString() : null,\n  downloadStatus: binaryData ? 'success' : 'failed',\n  // Binary data sẽ được tự động pass qua n8n\n  // Có thể access qua $binary trong các node tiếp theo\n};\n\nconsole.log('✅ File downloaded from Cloudinary:', result.cloudinaryUrl);\nconsole.log('   File binary available:', !!binaryData);\nconsole.log('   File name:', result.fileName);\nconsole.log('   Processing ID:', result.processingId);\n\n// Trả về với binary data (nếu có)\nif (binaryData) {\n  return [{ json: result, binary: $binary }];\n} else {\n  return [{ json: result }];\n}\n"
+      },
+      "name": "2.6️⃣ Merge File Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        720
+      ],
+      "id": "5e93eca7-4ff2-4d27-bff0-5a845b745f9b"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 📋 Chuẩn bị prompt chi tiết với tất cả data đã chuẩn hóa cho Gemini\nconst data = $json;\nconst binaryData = $binary?.data || null;\n\n// Kiểm tra có file PDF không\nif (!binaryData) {\n  console.warn('⚠️ Không có file PDF binary data!');\n}\n\n// Tạo prompt chi tiết với tất cả thông tin\nconst prompt = `Bạn là một chuyên gia phân tích tuân thủ GDPR (General Data Protection Regulation).\n\nNHIỆM VỤ: Phân tích tài liệu PDF đính kèm và đưa ra quyết định GDPR phù hợp.\n\nTHÔNG TIN TÀI LIỆU:\n- Tên file: ${data.fileName || 'Không xác định'}\n- Processing ID: ${data.processingId || 'Không có'}\n- Người upload: ${data.uploader || 'Không xác định'}\n- User ID: ${data.userId || 'Không có'}\n- Phòng ban: ${data.department || 'Không có'}\n- Kích thước file: ${data.fileSize || 'Không xác định'}\n- MIME Type: ${data.mimeType || 'Không xác định'}\n- URL file: ${data.cloudinaryUrl || data.fileUrl || 'Không có'}\n\n${data.analysisResults ? `\nKẾT QUẢ PHÂN TÍCH TRƯỚC ĐÓ (nếu có):\n${JSON.stringify(data.analysisResults, null, 2)}\n` : ''}\n\nYÊU CẦU PHÂN TÍCH:\n1. Đọc và phân tích toàn bộ nội dung tài liệu PDF đính kèm\n2. Xác định các loại dữ liệu cá nhân (PII) có trong tài liệu:\n   - Tên, địa chỉ, số điện thoại, email\n   - Số CMND/CCCD, passport\n   - Thông tin tài chính (số tài khoản, thẻ tín dụng)\n   - Thông tin y tế\n   - Dữ liệu sinh trắc học\n   - Dữ liệu nhạy cảm khác\n3. Đánh giá mức độ nhạy cảm của dữ liệu (cao/trung bình/thấp)\n4. Xác định khối lượng dữ liệu (high/medium/low)\n5. Xác định cơ sở pháp lý (legal basis) cho việc xử lý dữ liệu:\n   - consent (đồng ý)\n   - contract (hợp đồng)\n   - legal obligation (nghĩa vụ pháp lý)\n   - vital interests (lợi ích quan trọng)\n   - public task (nhiệm vụ công)\n   - legitimate interests (lợi ích hợp pháp)\n6. Đưa ra quyết định GDPR:\n   - \"delete\": Xóa tài liệu nếu vi phạm nghiêm trọng GDPR\n   - \"anonymize\": Ẩn danh hóa dữ liệu cá nhân\n   - \"allow\": Cho phép lưu trữ nếu tuân thủ GDPR\n7. Xác định các trường cần redact (ẩn danh hóa) nếu quyết định là \"anonymize\"\n8. Xác định thời gian lưu trữ (retention days)\n9. Xác định có cần thông báo DPO (Data Protection Officer) không\n\nĐỊNH DẠNG OUTPUT (JSON):\n{\n  \"content\": {\n    \"gdprDecision\": \"delete|anonymize|allow\",\n    \"notifyDPO\": true/false,\n    \"legalBasis\": \"consent|contract|legal_obligation|vital_interests|public_task|legitimate_interests|null\",\n    \"retentionDays\": số_ngày,\n    \"redactionFields\": [\"danh_sách_các_trường_cần_ẩn\"],\n    \"gdprJustification\": \"Lý do chi tiết cho quyết định\",\n    \"fileUrl\": \"${data.fileUrl || ''}\",\n    \"fileName\": \"${data.fileName || ''}\",\n    \"personalDataFound\": [\"danh_sách_dữ_liệu_cá_nhân_tìm_thấy\"],\n    \"sensitiveDataDetected\": true/false,\n    \"dataVolume\": \"high|medium|low\"\n  },\n  \"finishReason\": \"stop\",\n  \"index\": 0,\n  \"uploader\": \"${data.uploader || ''}\"\n}\n\nQUAN TRỌNG:\n- Phân tích kỹ lưỡng nội dung PDF\n- Đưa ra quyết định dựa trên các nguyên tắc GDPR\n- Giải thích rõ ràng lý do cho quyết định\n- Trả về JSON đúng định dạng`;\n\n// Lưu prompt vào result\nconst result = {\n  ...data,\n  gdprPrompt: prompt,\n  hasPdfBinary: !!binaryData\n};\n\nconsole.log('✅ Đã chuẩn bị prompt cho GDPR analysis');\nconsole.log('   Has PDF binary:', !!binaryData);\nconsole.log('   File name:', data.fileName);\n\n// Trả về với binary data (nếu có) để Gemini có thể đọc file PDF\nif (binaryData) {\n  return [{ json: result, binary: $binary }];\n} else {\n  return [{ json: result }];\n}"
+      },
+      "name": "2.7️⃣ Chuẩn bị Prompt GDPR",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        720
+      ],
+      "id": "d2d9a709-14a5-4fe7-87ed-2841d4cb82c4"
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "text": "={{ $json.gdprPrompt }}",
+        "options": {}
+      },
+      "name": "3️⃣ AI GDPR Decision",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        416,
+        720
+      ],
+      "id": "c3867886-5524-41eb-94b7-41a94ecea670",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "XVtVZk5W7pbY5uMP",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 🧠 Parse kết quả AI GDPR (Node 4) - FIXED VERSION\nlet ai = {};\nlet raw = '';\nlet clean = '';\nlet match = null;\n\ntry {\n  // 🔍 Lấy text từ phản hồi của Gemini\n  raw = $json?.content?.parts?.[0]?.text || $json?.text || JSON.stringify($json);\n\n  // 🧹 Làm sạch ký hiệu code block\n  clean = raw.replace(/```json/gi, '').replace(/```/g, '').trim();\n\n  // 🔎 Tìm đoạn JSON trong text\n  match = clean.match(/\\{[\\s\\S]*\\}/);\n\n  // 🧾 Parse JSON\n  ai = JSON.parse(match ? match[0] : clean);\n  console.log(\"✅ Parsed AI JSON:\", ai);\n} catch (error) {\n  console.warn(\"⚠️ Parse error:\", error.message);\n  console.log(\"📝 Raw preview:\", raw?.slice(0, 300));\n\n  // 🛟 Fallback an toàn\n  ai = {\n    content: {\n      gdprDecision: \"anonymize\",\n      notifyDPO: true,\n      gdprJustification: \"⚠️ Parsing fallback due to invalid AI output\"\n    },\n    uploader: \"dangnguyen0175@gmail.com\"\n  };\n}\n\n// 🧩 Hợp nhất dữ liệu đầu vào + kết quả AI\nconst result = {\n  ...$input.first().json,\n  aiRawOutput: raw || null,\n\n  // 🧠 Lấy dữ liệu từ cấu trúc lồng nhau (ai.content.*)\n  gdprDecision: ai.content?.gdprDecision || ai.gdprDecision || ai.action || \"anonymize\",\n  notifyDPO: !!(ai.content?.notifyDPO ?? ai.notifyDPO),\n  gdprJustification: ai.content?.gdprJustification || ai.gdprJustification || ai.justification || \"N/A\",\n  legalBasis: ai.content?.legalBasis || ai.legalBasis || null,\n  dataSubjectRequest: ai.content?.dataSubjectRequest || ai.dataSubjectRequest || null,\n  retentionDays: ai.content?.retentionDays || ai.retentionDays || 30,\n  redactionFields: ai.content?.redactionFields || ai.redactionFields || [],\n  aiDecisionTimestamp: ai.aiDecisionTimestamp || new Date().toISOString(),\n  uploader: ai.uploader || $input.first().json.uploader || \"dangnguyen0175@gmail.com\",\n  // 🔗 Thông tin file từ AI (nếu có)\n  fileUrl: ai.content?.fileUrl || $input.first().json.fileUrl || null,\n  fileName: ai.content?.fileName || $input.first().json.fileName || null,\n  // 🔍 Thông tin phân tích nội dung file\n  personalDataFound: ai.content?.personalDataFound || ai.personalDataFound || [],\n  sensitiveDataDetected: ai.content?.sensitiveDataDetected ?? ai.sensitiveDataDetected ?? false,\n  dataVolume: ai.content?.dataVolume || ai.dataVolume || 'unknown',\n  // 🧾 Log thêm thông tin trạng thái parser\n  aiParseStatus: match ? \"success\" : \"fallback\",\n  aiParsed: ai\n};\n\n// 🧾 Log kết quả cuối cùng để kiểm tra\nconsole.log(\"📜 GDPR Parsed Result:\", result);\n\nreturn [{ json: result }];\n"
+      },
+      "name": "4️⃣ Parse quyết định GDPR",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        720
+      ],
+      "id": "36c916b9-3142-4912-8ea9-c39abbe913d2"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{ $json.gdprDecision }}",
+              "rightValue": "delete",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "5️⃣ Hành động: Delete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        704,
+        576
+      ],
+      "id": "135259cd-b8fe-4f5e-9108-80cbc5c6e855"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{ $json.gdprDecision }}",
+              "rightValue": "anonymize",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "6️⃣ Hành động: Anonymize?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        704,
+        752
+      ],
+      "id": "080683e4-d1a3-467f-aea4-335bca1df8de"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===============================================\n// 🧹 GDPR ACTION: DELETE / REVOKE DOCUMENT ACCESS\n// ===============================================\n\n// Lấy dữ liệu đầu vào\nconst data = $json;\nconst fileId = data.originalFileId || null;\n\n// Biến kết quả mặc định\nlet result = {\n  ...data,\n  gdprActionPerformed: 'delete',\n  status: 'GDPR_REVOKE_APPLIED',\n  deleteSuccess: false,\n  deleteMethod: null,\n  deleteTimestamp: new Date().toISOString(),\n  deleteLog: ''\n};\n\n// Nếu có ID file gốc thì tiến hành “xóa” (hoặc thu hồi chia sẻ)\ntry {\n  if (fileId) {\n    // --- Nếu bạn dùng Google Drive API ---\n    // Giả lập hành động gọi API n8n khác (ở môi trường thực, sẽ dùng node Google Drive Delete)\n    result.deleteMethod = 'revoke_access';\n    result.deleteSuccess = true;\n    result.deleteLog = `Tài liệu ${fileId} đã được thu hồi quyền truy cập.`;\n  } else {\n    result.deleteLog = 'Không tìm thấy originalFileId để xóa.';\n  }\n} catch (err) {\n  result.status = 'GDPR_DELETE_FAILED';\n  result.deleteSuccess = false;\n  result.deleteLog = `Lỗi khi xóa: ${err.message}`;\n}\n\n// Trả về kết quả xử lý\nreturn [{ json: result }];\n"
+      },
+      "name": "7️⃣ Thực thi Delete/Revoke",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        496
+      ],
+      "id": "fa779de4-696e-4d57-b5d8-0fbd36786edc"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Giả lập ẩn danh/redact\nlet summary = $json.documentSummary || '';\nfor (const f of ($json.redactionFields || [])) summary = summary.replace(new RegExp(f, 'gi'), '[REDACTED]');\nreturn { json: { ...$json, documentSummary: summary, gdprActionPerformed: 'anonymize', status: 'GDPR_ANON_APPLIED' } };"
+      },
+      "name": "7️⃣ Thực thi Anonymize/Redact",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        752
+      ],
+      "id": "3f68dc87-f3e7-48a0-8eaf-5d274a34b4c1"
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: { ...$json, gdprActionPerformed: 'allow', status: 'GDPR_ALLOWED' } };"
+      },
+      "name": "7️⃣.5️⃣ Đặt trạng thái Allow",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        944
+      ],
+      "id": "8613689e-80d7-405c-98a6-78ea7faad0b2"
+    },
+    {
+      "parameters": {},
+      "name": "7.8 Merge Actions",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 1,
+      "position": [
+        976,
+        512
+      ],
+      "id": "9dee6673-3bc2-4277-a1da-145729f8bea7"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{ $json.notifyDPO }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            },
+            {
+              "id": "f37a3bfe-bcfc-4d92-b65b-c672411cf81e",
+              "leftValue": "={{ $json.notifyDPO }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "name": "8️⃣ Cần thông báo DPO?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1168,
+        720
+      ],
+      "id": "3e7a95d2-57fd-4187-ad63-7bff9ea7ed9a"
+    },
+    {
+      "parameters": {
+        "sendTo": "tranhaduy204@gmail.com",
+        "subject": "=🔐 GDPR Alert: {{ $json.gdprDecision?.toUpperCase() || 'UNKNOWN' }} file requires immediate attention",
+        "emailType": "text",
+        "message": "=Kính chào DPO,\n\nHệ thống AI GDPR Compliance Agent đã phát hiện một tài liệu vi phạm quy định GDPR và cần sự can thiệp ngay lập tức.\n\n**Thông tin tài liệu:**\n- Tên file: {{ $json.fileName || 'Không xác định' }}\n- URL file: {{ $json.fileUrl || 'Không có URL' }}\n- Uploader: {{ $json.uploader || 'Không xác định' }}\n- Quyết định xử lý: {{ $json.gdprDecision || 'Không xác định' }}\n- Thông báo DPO: {{ $json.notifyDPO || 'Không' }}\n- Cơ sở pháp lý: {{ $json.legalBasis || 'Không có' }}\n\n**🔍 Phân tích nội dung file:**\n- Dữ liệu cá nhân tìm thấy: {{ $json.personalDataFound && $json.personalDataFound.length > 0 ? $json.personalDataFound.join(', ') : 'Không có' }}\n- Dữ liệu nhạy cảm: {{ $json.sensitiveDataDetected ? 'Có' : 'Không' }}\n- Khối lượng dữ liệu: {{ $json.dataVolume || 'Không xác định' }}\n- Các trường cần redact: {{ $json.redactionFields && $json.redactionFields.length > 0 ? $json.redactionFields.join(', ') : 'Không có' }}\n\n**Lý do quyết định:**\n{{ $json.gdprJustification || 'Không có lý do cụ thể được cung cấp.' }}\n\n**Thời điểm ra quyết định:** {{ $json.aiDecisionTimestamp || (new Date()).toISOString() }}\n\n**Hành động khuyến nghị:**\n- Xem xét và xác nhận quyết định của AI\n- Liên hệ với uploader để làm rõ mục đích sử dụng dữ liệu\n- Thực hiện các biện pháp khắc phục cần thiết\n- Cập nhật chính sách bảo mật nếu cần\n\nTrân trọng,\n**AI GDPR Compliance Agent**",
+        "options": {}
+      },
+      "name": "9️⃣ Gửi email DPO",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        608
+      ],
+      "id": "80528bf3-a700-4609-834f-e66b48d7558f",
+      "webhookId": "02bbf782-9357-4ea4-b78e-664aaad97422",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "LTZtTwz14XXGyrdz",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 📧 Chuẩn bị dữ liệu email cho uploader\n// Lấy dữ liệu từ node Parse quyết định GDPR (node có đầy đủ thông tin GDPR)\nlet gdprData = {};\n\ntry {\n  // Thử lấy từ node Parse quyết định GDPR trực tiếp\n  gdprData = $('4️⃣ Parse quyết định GDPR').item.json || {};\n  console.log('✅ Lấy dữ liệu từ node Parse quyết định GDPR');\n} catch (e) {\n  // Fallback: lấy từ input items\n  const inputItems = $input.all();\n  if (inputItems.length > 0) {\n    for (const item of inputItems) {\n      if (item.json && (item.json.gdprDecision || item.json.notifyDPO !== undefined)) {\n        gdprData = item.json;\n        break;\n      }\n    }\n    if (Object.keys(gdprData).length === 0 && inputItems.length > 0) {\n      gdprData = inputItems[0].json || {};\n    }\n  }\n  if (Object.keys(gdprData).length === 0) {\n    gdprData = $json || {};\n  }\n}\n\n// Validate và format email address\nfunction isValidEmail(email) {\n  if (!email || typeof email !== 'string') return false;\n  const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n  return emailRegex.test(email.trim());\n}\n\n// Lấy uploader và validate email\nlet uploaderEmail = gdprData.uploader || $json.uploader || null;\n\n// Nếu uploader không phải email hợp lệ, dùng default\nif (!isValidEmail(uploaderEmail)) {\n  console.warn('⚠️ Uploader không phải email hợp lệ:', uploaderEmail);\n  console.warn('   Sử dụng email mặc định: dangnguyen0175@gmail.com');\n  uploaderEmail = 'dangnguyen0175@gmail.com';\n}\n\n// Merge tất cả dữ liệu GDPR\nconst result = {\n  ...$json, // Giữ dữ liệu từ node trước\n  // Ghi đè bằng dữ liệu GDPR từ Parse node\n  uploader: uploaderEmail, // Email đã được validate\n  gdprDecision: gdprData.gdprDecision || $json.gdprDecision || 'UNKNOWN',\n  notifyDPO: gdprData.notifyDPO !== undefined ? gdprData.notifyDPO : ($json.notifyDPO !== undefined ? $json.notifyDPO : false),\n  gdprJustification: gdprData.gdprJustification || $json.gdprJustification || 'Không có lý do được cung cấp.',\n  legalBasis: gdprData.legalBasis || $json.legalBasis || null,\n  retentionDays: gdprData.retentionDays || $json.retentionDays || 30,\n  redactionFields: gdprData.redactionFields || $json.redactionFields || [],\n  personalDataFound: gdprData.personalDataFound || $json.personalDataFound || [],\n  sensitiveDataDetected: gdprData.sensitiveDataDetected !== undefined ? gdprData.sensitiveDataDetected : ($json.sensitiveDataDetected !== undefined ? $json.sensitiveDataDetected : false),\n  dataVolume: gdprData.dataVolume || $json.dataVolume || 'unknown',\n  aiDecisionTimestamp: gdprData.aiDecisionTimestamp || $json.aiDecisionTimestamp || new Date().toISOString(),\n  fileName: gdprData.fileName || $json.fileName || null,\n  fileUrl: gdprData.fileUrl || $json.fileUrl || null,\n  cloudinaryUrl: gdprData.cloudinaryUrl || $json.cloudinaryUrl || null,\n  processingId: gdprData.processingId || $json.processingId || null,\n  userId: gdprData.userId || $json.userId || null\n};\n\nconsole.log('✅ Dữ liệu email đã chuẩn bị:');\nconsole.log('   Uploader email:', result.uploader);\nconsole.log('   GDPR Decision:', result.gdprDecision);\nconsole.log('   File Name:', result.fileName);\nconsole.log('   Legal Basis:', result.legalBasis);\n\nreturn [{ json: result }];"
+      },
+      "name": "9.5️⃣ Chuẩn bị Email Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1456,
+        720
+      ],
+      "id": "b0afb7cc-1512-40d8-9186-5432ced42a80"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.uploader }}",
+        "subject": "=📣 GDPR Result: {{ $json.gdprDecision?.toUpperCase() || 'UNKNOWN' }}",
+        "emailType": "text",
+        "message": "=Kính chào bạn,\n\nHệ thống AI GDPR Compliance Agent đã hoàn tất việc kiểm tra tuân thủ GDPR cho tài liệu của bạn.\n\n**Thông tin tài liệu:**\n- Tên file: {{ $json.fileName || 'Không xác định' }}\n- Processing ID: {{ $json.processingId || 'Không có' }}\n- URL file: {{ $json.fileUrl || $json.cloudinaryUrl || 'Không có URL' }}\n\n**🔍 Kết quả phân tích nội dung:**\n- Dữ liệu cá nhân tìm thấy: {{ Array.isArray($json.personalDataFound) && $json.personalDataFound.length > 0 ? $json.personalDataFound.join(', ') : ($json.personalDataFound ? String($json.personalDataFound) : 'Không có') }}\n- Dữ liệu nhạy cảm: {{ $json.sensitiveDataDetected ? 'Có' : 'Không' }}\n- Khối lượng dữ liệu: {{ $json.dataVolume || 'Không xác định' }}\n\n**Kết quả quyết định GDPR:**\n- Quyết định xử lý: **{{ $json.gdprDecision || 'Không xác định' }}**\n- Thông báo DPO: {{ $json.notifyDPO ? 'Có' : 'Không' }}\n- Cơ sở pháp lý: {{ $json.legalBasis || 'Không có' }}\n- Thời gian lưu trữ: {{ $json.retentionDays || 30 }} ngày\n- Các trường cần redact: {{ Array.isArray($json.redactionFields) && $json.redactionFields.length > 0 ? $json.redactionFields.join(', ') : ($json.redactionFields ? String($json.redactionFields) : 'Không có') }}\n\n**Lý do quyết định:**\n{{ $json.gdprJustification || 'Không có lý do được cung cấp.' }}\n\n**Thời điểm ra quyết định:** {{ $json.aiDecisionTimestamp || (new Date()).toISOString() }}\n\nNếu bạn có bất kỳ thắc mắc nào về kết quả này, vui lòng liên hệ với bộ phận bảo mật dữ liệu (DPO) để được hỗ trợ.\n\nTrân trọng,\n**AI GDPR Compliance Agent**",
+        "options": {}
+      },
+      "name": "1️⃣0️⃣ Thông báo kết quả cho uploader",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [
+        1552,
+        720
+      ],
+      "id": "da908333-f3d6-49b2-be82-cf677a01c3d0",
+      "webhookId": "62b2fab2-9f29-4f76-9c77-89e5acbbdf61",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "LTZtTwz14XXGyrdz",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "16eU4No0bLeMYCxjo0586358kzjuBrrf52fRo_n7SDFg",
+          "mode": "list",
+          "cachedResultName": "Log GDPR",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/16eU4No0bLeMYCxjo0586358kzjuBrrf52fRo_n7SDFg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Trang tính1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/16eU4No0bLeMYCxjo0586358kzjuBrrf52fRo_n7SDFg/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "threadId",
+              "displayName": "threadId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "labelIds",
+              "displayName": "labelIds",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "name": "1️⃣1️⃣ Ghi log GDPR vào Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        1744,
+        720
+      ],
+      "id": "e00b20ea-40d0-43cb-baad-804849c346ab",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "cmWSNW94QNgr3T8o",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Audit Trail GDPR\nreturn { json: { auditId: `gdpr_${Date.now()}`, timestamp: new Date().toISOString(), ...$json } };"
+      },
+      "name": "1️⃣2️⃣ Tạo Audit Trail GDPR",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1936,
+        720
+      ],
+      "id": "0b68b145-434c-415e-9c15-e604f70709b2"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 📤 Chuẩn bị dữ liệu để gửi đến Flow 3 (Document Sharing)\n// Lấy tất cả dữ liệu đã được xử lý trong Flow 2\nconst auditData = $json;\n\n// Lấy dữ liệu từ các node quan trọng\nlet gdprData = {};\nlet normalizedData = {};\n\ntry {\n  // Lấy từ node Parse quyết định GDPR (có đầy đủ thông tin GDPR)\n  gdprData = $('4️⃣ Parse quyết định GDPR').item.json || {};\n} catch (e) {\n  console.warn('⚠️ Không thể lấy dữ liệu từ Parse node:', e.message);\n}\n\ntry {\n  // Lấy từ node chuẩn hóa (có thông tin file gốc)\n  normalizedData = $('2️⃣ Chuẩn hóa dữ liệu đầu vào').item.json || {};\n} catch (e) {\n  console.warn('⚠️ Không thể lấy dữ liệu từ Normalize node:', e.message);\n}\n\n// Tạo payload đầy đủ để gửi đến Flow 3\nconst payload = {\n  // Thông tin cơ bản\n  processingId: auditData.processingId || gdprData.processingId || normalizedData.processingId || null,\n  processing_id: auditData.processingId || gdprData.processingId || normalizedData.processingId || null,\n  file_name: auditData.fileName || gdprData.fileName || normalizedData.fileName || null,\n  file_url: auditData.fileUrl || gdprData.fileUrl || normalizedData.fileUrl || null,\n  cloudinary_url: auditData.cloudinaryUrl || gdprData.cloudinaryUrl || normalizedData.cloudinaryUrl || null,\n  user_id: auditData.userId || gdprData.userId || normalizedData.userId || null,\n  department: auditData.department || gdprData.department || normalizedData.department || null,\n  status: 'gdpr_completed', // Trạng thái sau khi Flow 2 hoàn thành\n  \n  // Kết quả phân tích từ Flow 1 (nếu có)\n  analysis_results: auditData.analysisResults || gdprData.analysisResults || normalizedData.analysisResults || null,\n  \n  // Kết quả GDPR từ Flow 2\n  gdpr_decision: gdprData.gdprDecision || auditData.gdprDecision || null,\n  gdpr_justification: gdprData.gdprJustification || auditData.gdprJustification || null,\n  legal_basis: gdprData.legalBasis || auditData.legalBasis || null,\n  retention_days: gdprData.retentionDays || auditData.retentionDays || null,\n  redaction_fields: gdprData.redactionFields || auditData.redactionFields || [],\n  personal_data_found: gdprData.personalDataFound || auditData.personalDataFound || [],\n  sensitive_data_detected: gdprData.sensitiveDataDetected !== undefined ? gdprData.sensitiveDataDetected : (auditData.sensitiveDataDetected !== undefined ? auditData.sensitiveDataDetected : false),\n  data_volume: gdprData.dataVolume || auditData.dataVolume || null,\n  notify_dpo: gdprData.notifyDPO !== undefined ? gdprData.notifyDPO : (auditData.notifyDPO !== undefined ? auditData.notifyDPO : false),\n  \n  // Metadata\n  docx_url: auditData.docxUrl || gdprData.docxUrl || normalizedData.docxUrl || null,\n  created_at: auditData.createdAt || normalizedData.receivedAt || new Date().toISOString(),\n  updated_at: new Date().toISOString(),\n  gdpr_completed_at: auditData.aiDecisionTimestamp || gdprData.aiDecisionTimestamp || new Date().toISOString(),\n  audit_id: auditData.auditId || null,\n  \n  // Thông tin bổ sung\n  workflow_source: 'flow2-gdpr-compliance',\n  flow2_completed: true\n};\n\nconsole.log('✅ Đã chuẩn bị payload để gửi đến Flow 3:');\nconsole.log('   Processing ID:', payload.processingId);\nconsole.log('   File Name:', payload.file_name);\nconsole.log('   GDPR Decision:', payload.gdpr_decision);\nconsole.log('   User ID:', payload.user_id);\n\nreturn [{ json: payload }];"
+      },
+      "name": "1️⃣3️⃣ Chuẩn bị Data cho Flow 3",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2144,
+        720
+      ],
+      "id": "c74b597b-3d87-44e9-aca0-f54797d768f4"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n.aidocmanageagent.io.vn/webhook-test/sharing-file",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "1️⃣4️⃣ Gửi Data đến Flow 3",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2336,
+        720
+      ],
+      "id": "19d642f4-7baf-47b2-8f31-96a5d9a2ef8b",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// 🔍 DEBUG: Kiểm tra dữ liệu trước khi gửi email\n// Lấy dữ liệu từ node Parse quyết định GDPR (node có đầy đủ thông tin GDPR)\nlet gdprData = {};\n\ntry {\n  // Thử lấy từ node Parse quyết định GDPR trực tiếp\n  gdprData = $('4️⃣ Parse quyết định GDPR').item.json || {};\n  console.log('✅ Lấy dữ liệu từ node Parse quyết định GDPR');\n} catch (e) {\n  // Fallback: lấy từ input items (node trước đó)\n  const inputItems = $input.all();\n  if (inputItems.length > 0) {\n    // Tìm item có đầy đủ thông tin GDPR\n    for (const item of inputItems) {\n      if (item.json && (item.json.gdprDecision || item.json.notifyDPO !== undefined)) {\n        gdprData = item.json;\n        console.log('✅ Lấy dữ liệu từ input items');\n        break;\n      }\n    }\n    // Nếu không tìm thấy, dùng item đầu tiên\n    if (Object.keys(gdprData).length === 0 && inputItems.length > 0) {\n      gdprData = inputItems[0].json || {};\n    }\n  }\n  // Cuối cùng, dùng $json hiện tại\n  if (Object.keys(gdprData).length === 0) {\n    gdprData = $json || {};\n    console.log('⚠️ Dùng dữ liệu từ $json hiện tại');\n  }\n}\n\nconsole.log('🔍 DEBUG - Dữ liệu từ Parse node:');\nconsole.log('gdprDecision:', gdprData.gdprDecision);\nconsole.log('notifyDPO:', gdprData.notifyDPO);\nconsole.log('uploader:', gdprData.uploader);\nconsole.log('gdprJustification:', gdprData.gdprJustification?.substring(0, 100));\nconsole.log('Full gdprData keys:', Object.keys(gdprData));\n\n// 🧹 Merge dữ liệu: ưu tiên gdprData từ Parse node, sau đó là $json hiện tại\nconst result = {\n  ...$json, // Giữ nguyên dữ liệu từ node trước (có thể có thông tin email)\n  // Ghi đè bằng dữ liệu GDPR từ Parse node (đảm bảo có đầy đủ thông tin)\n  gdprDecision: gdprData.gdprDecision || $json.gdprDecision || 'UNKNOWN',\n  notifyDPO: gdprData.notifyDPO !== undefined ? gdprData.notifyDPO : ($json.notifyDPO !== undefined ? $json.notifyDPO : false),\n  uploader: gdprData.uploader || $json.uploader || 'dangnguyen0175@gmail.com',\n  gdprJustification: gdprData.gdprJustification || $json.gdprJustification || 'Không có lý do được cung cấp.',\n  legalBasis: gdprData.legalBasis || $json.legalBasis || null,\n  retentionDays: gdprData.retentionDays || $json.retentionDays || 30,\n  redactionFields: gdprData.redactionFields || $json.redactionFields || [],\n  personalDataFound: gdprData.personalDataFound || $json.personalDataFound || [],\n  sensitiveDataDetected: gdprData.sensitiveDataDetected !== undefined ? gdprData.sensitiveDataDetected : ($json.sensitiveDataDetected !== undefined ? $json.sensitiveDataDetected : false),\n  dataVolume: gdprData.dataVolume || $json.dataVolume || 'unknown',\n  aiDecisionTimestamp: gdprData.aiDecisionTimestamp || $json.aiDecisionTimestamp || new Date().toISOString(),\n  // Giữ các thông tin khác từ node trước\n  fileName: gdprData.fileName || $json.fileName || null,\n  fileUrl: gdprData.fileUrl || $json.fileUrl || null,\n  processingId: gdprData.processingId || $json.processingId || null,\n  userId: gdprData.userId || $json.userId || null\n};\n\nconsole.log('✅ DEBUG - Dữ liệu sau xử lý:');\nconsole.log('gdprDecision:', result.gdprDecision);\nconsole.log('notifyDPO:', result.notifyDPO);\nconsole.log('uploader:', result.uploader);\nconsole.log('legalBasis:', result.legalBasis);\nconsole.log('retentionDays:', result.retentionDays);\n\nreturn [{ json: result }];"
+      },
+      "name": "🔍 DEBUG: Kiểm tra dữ liệu",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1232,
+        64
+      ],
+      "id": "a6d64d0c-14b8-4426-b1f9-8c2a02e20180"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gdpr-compliance",
+        "options": {}
+      },
+      "name": "1️⃣ Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -208,
+        720
+      ],
+      "id": "f3c5138c-712c-4f2f-b2ef-d56347691930",
+      "webhookId": "gdpr-compliance-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Script để chuẩn bị dữ liệu từ Aggregate node và lưu vào Postgres\nconst aggregateData = $json; // Lấy dữ liệu trực tiếp từ Aggregate node\nconst fileData = $('Set File Data1').item.json;\n\n// Chuẩn bị dữ liệu để lưu vào Postgres\nconst dataToSave = {\n  processing_id: fileData.processingId,\n  file_name: fileData.name,\n  file_url: fileData.file_url,\n  user_id: fileData.userId,\n  department: fileData.department,\n  status: 'completed',\n  analysis_results: aggregateData,\n  cloudinary_url: fileData.cloudinary_url || fileData.file_url,\n  docx_url: '', // Không có Google Docs URL\n  created_at: new Date().toISOString(),\n  updated_at: new Date().toISOString(),\n  analysis_completed_at: new Date().toISOString()\n};\n\nreturn [{\n  json: dataToSave\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        2800
+      ],
+      "id": "957f1630-2b35-4970-a9bc-5de0cbddbaae",
+      "name": "Save to Postgres Script1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Script để lấy dữ liệu từ Postgres node và format để gửi đến Flow 2 (GDPR Compliance)\n// Postgres trả về dữ liệu trong $json, có thể là array hoặc object\nlet postgresResult = $json;\n\n// Nếu là array, lấy phần tử đầu tiên\nif (Array.isArray(postgresResult)) {\n  postgresResult = postgresResult[0] || postgresResult;\n}\n\n// Nếu Postgres trả về dạng { rows: [...] }, lấy rows\nif (postgresResult && postgresResult.rows && Array.isArray(postgresResult.rows)) {\n  postgresResult = postgresResult.rows[0] || {};\n}\n\n// Lấy fileData từ Set File Data\nconst fileData = $('Set File Data1').item.json;\n\n// Format dữ liệu để gửi đến Flow 2 (GDPR Compliance webhook)\n// Flow 2 cần: file info, analysis_results, processing_id, cloudinary_url, docx_url\nconst responseData = {\n  success: true,\n  processingId: postgresResult.processing_id || fileData.processingId || '',\n  message: \"Document analysis completed\",\n  // Dữ liệu chính để Flow 2 xử lý\n  data: {\n    processing_id: postgresResult.processing_id || fileData.processingId || '',\n    file_name: postgresResult.file_name || fileData.name || '',\n    file_url: postgresResult.file_url || fileData.file_url || '',\n    user_id: postgresResult.user_id || fileData.userId || '',\n    department: postgresResult.department || fileData.department || '',\n    status: postgresResult.status || 'completed',\n    analysis_results: postgresResult.analysis_results || null,\n    cloudinary_url: postgresResult.cloudinary_url || fileData.cloudinary_url || fileData.file_url || '',\n    docx_url: postgresResult.docx_url || '', // Google Docs URL\n    created_at: postgresResult.created_at || new Date().toISOString(),\n    updated_at: postgresResult.updated_at || new Date().toISOString(),\n    analysis_completed_at: postgresResult.analysis_completed_at || new Date().toISOString()\n  },\n  // Thông tin file để Flow 2 download và phân tích\n  file: {\n    name: postgresResult.file_name || fileData.name || '',\n    url: postgresResult.cloudinary_url || fileData.cloudinary_url || fileData.file_url || '',\n    cloudinary_url: postgresResult.cloudinary_url || fileData.cloudinary_url || fileData.file_url || '',\n    processingId: postgresResult.processing_id || fileData.processingId || ''\n  }\n};\n\nconsole.log('📤 Sending data to Flow 2 (GDPR Compliance):', JSON.stringify(responseData, null, 2));\n\nreturn [{\n  json: responseData\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1776,
+        2800
+      ],
+      "id": "1fa13112-313d-4a36-af8f-88079b7dea3d",
+      "name": "Retrieve from Postgres Script1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://n8n.aidocmanageagent.io.vn/webhook/gdpr-compliance",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2048,
+        2800
+      ],
+      "id": "72d46129-8cdf-418f-91a2-748669343565",
+      "name": "Send HTTP Request to Flow ",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "document-analyzer",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -336,
+        2384
+      ],
+      "id": "2af1f0cc-8ff9-4d57-a3ca-7a279dd167bd",
+      "name": "Webhook1",
+      "webhookId": "8c724e88-5a5d-4919-82ba-760f48bf341f"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"Document processing started\",\n  \"processingId\": \"{{ $json.body.processingId || $json.processingId || 'unknown' }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -128,
+        2384
+      ],
+      "id": "0239dc58-0a73-4829-a4c8-dc77471be71c",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Delay 5 giây trước khi gọi Gemini API để tránh rate limit\nconsole.log('⏳ Waiting 5 seconds before AI call...');\nawait new Promise(resolve => setTimeout(resolve, 5000));\nconsole.log('✅ Wait completed, proceeding to AI node');\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        2304
+      ],
+      "id": "0e60a713-9fb6-49ed-a85c-47c001d8829d",
+      "name": "Wait Before AI1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse kết quả từ comprehensive_analysis node\nconst aiResult = $json.output || $json;\n\nconsole.log('Raw AI Result:', JSON.stringify(aiResult, null, 2));\n\n// Parse và format giống như 6 node cũ để tương thích với Merge node\nlet parsed = {};\n\ntry {\n  // Nếu AI trả về string, parse JSON\n  let parsedData = aiResult;\n  if (typeof aiResult === 'string') {\n    // Loại bỏ markdown code blocks nếu có\n    const cleanJson = aiResult\n      .replace(/```json/gi, '')\n      .replace(/```/g, '')\n      .trim();\n    \n    // Tìm JSON trong string\n    const jsonMatch = cleanJson.match(/\\{[\\s\\S]*\\}/);\n    if (jsonMatch) {\n      parsedData = JSON.parse(jsonMatch[0]);\n    } else {\n      parsedData = JSON.parse(cleanJson);\n    }\n  }\n  \n  // Format để tương thích với Merge node\n  parsed = {\n    // main_theme format\n    main_theme: {\n      output: {\n        main_theme: parsedData.main_theme || \"\"\n      }\n    },\n    \n    // document_summary format\n    document_summary: {\n      output: {\n        document_summary: Array.isArray(parsedData.document_summary) \n          ? parsedData.document_summary \n          : []\n      }\n    },\n    \n    // key_takeaways format\n    key_takeaways: {\n      output: {\n        key_takeaways: Array.isArray(parsedData.key_takeaways) \n          ? parsedData.key_takeaways \n          : []\n      }\n    },\n    \n    // gaps_and_limitations format\n    gaps_and_limitations: {\n      output: {\n        gaps_and_limitations: Array.isArray(parsedData.gaps_and_limitations) \n          ? parsedData.gaps_and_limitations \n          : []\n      }\n    },\n    \n    // follow_up_questions format\n    follow_up_questions: {\n      output: {\n        follow_up_questions: Array.isArray(parsedData.follow_up_questions) \n          ? parsedData.follow_up_questions \n          : []\n      }\n    },\n    \n    // terminology_to_clarify format\n    terminology_to_clarify: {\n      output: {\n        terminology_to_clarify: Array.isArray(parsedData.terminology_to_clarify) \n          ? parsedData.terminology_to_clarify \n          : []\n      }\n    }\n  };\n  \n  console.log('Parsed Result:', JSON.stringify(parsed, null, 2));\n  \n} catch (error) {\n  console.error('Error parsing AI result:', error);\n  console.error('Raw data:', aiResult);\n  \n  // Fallback với empty data\n  parsed = {\n    main_theme: { output: { main_theme: \"Error parsing AI result\" } },\n    document_summary: { output: { document_summary: [] } },\n    key_takeaways: { output: { key_takeaways: [] } },\n    gaps_and_limitations: { output: { gaps_and_limitations: [] } },\n    follow_up_questions: { output: { follow_up_questions: [] } },\n    terminology_to_clarify: { output: { terminology_to_clarify: [] } }\n  };\n}\n\n// Return format tương thích với Merge node\nreturn [{\n  json: {\n    name: $('Set File Data1').item.json.name,\n    main_theme: parsed.main_theme,\n    document_summary: parsed.document_summary,\n    key_takeaways: parsed.key_takeaways,\n    gaps_and_limitations: parsed.gaps_and_limitations,\n    follow_up_questions: parsed.follow_up_questions,\n    terminology_to_clarify: parsed.terminology_to_clarify\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1520,
+        2288
+      ],
+      "id": "e443fc23-b6dd-41c9-97bf-965620ac46e3",
+      "name": "Parse Combined Result1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=**Document Title:** {{ $('Set File Data1').item.json.name }}\n\n**Document Text:** {{ $json.text }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=YOU ARE A COMPREHENSIVE DOCUMENT ANALYSIS AGENT. YOU MUST ANALYZE A DOCUMENT AND EXTRACT ALL INFORMATION ACCURATELY, THEN OUTPUT ALL ANALYSIS RESULTS IN A SINGLE JSON OBJECT.\n\nYOUR TASK:\n1. CAREFULLY READ AND EXTRACT ALL INFORMATION from the document text (names, numbers, emails, IDs, passwords, dates, addresses, etc.)\n2. Identify the main theme and purpose of the document\n3. Create a detailed section-by-section summary with ALL extracted data\n4. Extract key takeaways including all personal information found\n5. Identify gaps and limitations (missing information)\n6. Generate relevant follow-up questions based on document type\n7. Clarify any terminology or abbreviations found\n\nCRITICAL EXTRACTION RULES:\n- Extract ALL personal information: names, phone numbers, emails, IDs (CCCD/CMND), passwords, addresses, dates\n- Extract ALL numbers, codes, and identifiers exactly as they appear\n- Extract ALL dates and timestamps\n- Preserve exact formatting and spelling\n- Do NOT modify or summarize extracted data - use exact values\n- If information is missing, note it in gaps_and_limitations\n\nOUTPUT FORMAT (MANDATORY JSON):\n{\n  \"main_theme\": \"Three sentences describing: document type/topic, purpose/use case, target audience/who it's for\",\n  \"document_summary\": [\n    {\n      \"section_title\": \"Exact section name or field name from document\",\n      \"content\": \"Detailed summary including ALL extracted values. For example: 'Họ và Tên: Trần Hà Duy, Số điện thoại: 0967125575, Email: haduy@gmail.com' - include ALL fields and their values\"\n    }\n  ],\n  \"key_takeaways\": [\n    {\n      \"point\": \"Specific information extracted (e.g., 'Personal identification information found', 'Contact details provided')\",\n      \"context\": \"Detailed explanation with actual values extracted (e.g., 'Document contains: Name: Trần Hà Duy, Phone: 0967125575, Email: haduy@gmail.com, CCCD: 03949582948')\"\n    }\n  ],\n  \"gaps_and_limitations\": [\n    {\n      \"issue\": \"Missing information or incomplete data (e.g., 'Missing address', 'No date of birth provided')\",\n      \"reason\": \"Why this gap matters or what impact it has\"\n    }\n  ],\n  \"follow_up_questions\": [\n    \"Relevant question based on document type (e.g., 'Is this information for account registration?', 'What is the purpose of collecting this personal data?')\"\n  ],\n  \"terminology_to_clarify\": [\n    {\n      \"term\": \"Term or abbreviation found (e.g., 'CCCD', 'CMND')\",\n      \"explanation\": \"Definition or meaning of the term\"\n    }\n  ]\n}\n\nREQUIREMENTS:\n- Return ONLY valid JSON, no markdown code blocks (no ```json)\n- All fields are required\n- Be SPECIFIC and ACCURATE - include actual extracted values in summaries\n- main_theme: 3 sentences describing document type, purpose, and audience\n- document_summary: Array of sections - each section MUST include ALL extracted data from that section with exact values\n- key_takeaways: 3-7 items - each MUST reference actual extracted information with values\n- gaps_and_limitations: 1-5 items - identify what information is missing\n- follow_up_questions: 3-7 relevant questions based on document content\n- terminology_to_clarify: Array of terms/abbreviations found with explanations\n\nIMPORTANT:\n- Do NOT wrap output in markdown code blocks\n- Output must be valid JSON that can be parsed directly\n- All arrays must have at least 1 item\n- Include ALL extracted information in document_summary and key_takeaways\n- Be detailed and comprehensive - do not summarize away important data\n- Preserve exact values from the document (names, numbers, emails, etc.)"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        1184,
+        2320
+      ],
+      "id": "fd76088f-d5e4-4006-8d56-491b8e961f67",
+      "name": "comprehensive_analysis1",
+      "settings": {
+        "errorHandling": {
+          "retry": {
+            "enabled": true,
+            "maxRetries": 5,
+            "retryDelay": 10000
+          }
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO documents (processing_id, file_name, file_url, user_id, department, status, analysis_results, cloudinary_url, docx_url, created_at, updated_at, analysis_completed_at) VALUES ('{{ $json.processing_id }}', '{{ $json.file_name }}', '{{ $json.file_url }}', '{{ $json.user_id }}', '{{ $json.department }}', '{{ $json.status }}', '{{ JSON.stringify($json.analysis_results).replace(/'/g, \"''\") }}'::jsonb, '{{ $json.cloudinary_url }}', '{{ $json.docx_url || '' }}', '{{ $json.created_at }}'::timestamp, '{{ $json.updated_at }}'::timestamp, '{{ $json.analysis_completed_at }}'::timestamp) ON CONFLICT (processing_id) DO UPDATE SET status = EXCLUDED.status, analysis_results = EXCLUDED.analysis_results, cloudinary_url = EXCLUDED.cloudinary_url, docx_url = COALESCE(NULLIF(EXCLUDED.docx_url, ''), documents.docx_url), updated_at = EXCLUDED.updated_at::timestamp, analysis_completed_at = EXCLUDED.analysis_completed_at::timestamp RETURNING *;",
+        "options": {}
+      },
+      "id": "aedac5b4-e23c-4e67-ad17-2e00a3e015ca",
+      "name": "Save Analysis to Postgres1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1568,
+        2800
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "lYVcMJl3c3m62cYc",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        2800
+      ],
+      "id": "a0f189b2-5d5a-4d79-8fd8-c7a09ba9dea5",
+      "name": "Aggregate1"
+    },
+    {
+      "parameters": {
+        "numberInputs": 1
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        944,
+        2720
+      ],
+      "id": "7ab3239d-bb76-4c37-9b7b-3a2e2a6eaa0a",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"main_theme\": \"Document type and content overview in three sentences: (1) What type of document this is and its primary topic, (2) The main purpose or objective of the document, (3) Who the intended audience or users are. Example: 'This is a business contract document outlining service terms and conditions. Its purpose is to establish legal obligations between parties. The target audience includes legal teams, business managers, and involved stakeholders.'\",\n  \"document_summary\": [\n    {\n      \"section_title\": \"Section or category name from the document (e.g., 'Introduction', 'Terms and Conditions', 'Personal Information', 'Financial Summary', 'Technical Specifications')\",\n      \"content\": \"Detailed summary of this section including ALL extracted data, values, dates, names, numbers, and key information. For personal info: 'Họ và Tên: Trần Hà Duy, Số điện thoại: 0967125575, Email: haduy@gmail.com'. For contracts: 'Parties: Company A and Company B, Contract Date: 2024-01-15, Duration: 12 months, Value: $50,000'. For reports: 'Report covers Q1 2024 performance, Revenue: $1.2M, Growth: 15%, Key metrics: 250 customers, 95% satisfaction'.\"\n    }\n  ],\n  \"key_takeaways\": [\n    {\n      \"point\": \"Main finding or important information extracted (e.g., 'Contract value and duration', 'Personal identification data found', 'Financial performance metrics', 'Technical requirements specified')\",\n      \"context\": \"Detailed explanation with actual extracted values. Examples: 'Document contains contract between Company A and B valued at $50,000 for 12 months starting 2024-01-15' OR 'Document contains personal information: Name: Trần Hà Duy, Phone: 0967125575, Email: haduy@gmail.com, CCCD: 03949582948' OR 'Q1 2024 report shows revenue of $1.2M with 15% growth and 250 active customers'\"\n    },\n    {\n      \"point\": \"Another important finding or data point\",\n      \"context\": \"Detailed explanation with specific values and context\"\n    },\n    {\n      \"point\": \"Additional key information or insight\",\n      \"context\": \"Detailed explanation with extracted data\"\n    }\n  ],\n  \"gaps_and_limitations\": [\n    {\n      \"issue\": \"Missing or incomplete information identified (e.g., 'Missing signature date', 'No contact address provided', 'Incomplete financial breakdown', 'Unclear technical specifications')\",\n      \"reason\": \"Why this gap matters or what impact it has (e.g., 'Signature date is required for contract validity' OR 'Address needed for complete profile' OR 'Financial breakdown needed for budget planning')\"\n    },\n    {\n      \"issue\": \"Another limitation or missing information\",\n      \"reason\": \"Explanation of why this matters\"\n    }\n  ],\n  \"follow_up_questions\": [\n    \"Relevant question based on document type and content. For personal info: 'What is the purpose of collecting this personal information?' For contracts: 'What are the key terms and obligations?' For reports: 'What are the main performance indicators?' For technical docs: 'What are the technical requirements and specifications?'\",\n    \"Another relevant question based on document content\",\n    \"Additional question to clarify or understand the document better\",\n    \"Question about data security, compliance, or next steps if applicable\"\n  ],\n  \"terminology_to_clarify\": [\n    {\n      \"term\": \"Technical term, abbreviation, or specialized vocabulary found in document (e.g., 'CCCD', 'GDPR', 'SLA', 'ROI', 'API', 'NDA')\",\n      \"explanation\": \"Clear definition or explanation of the term. Example: 'CCCD - Căn cước công dân, Vietnamese Citizen ID Card' OR 'SLA - Service Level Agreement, defines expected service performance' OR 'GDPR - General Data Protection Regulation, EU data privacy law'\"\n    }\n  ]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1344,
+        2176
+      ],
+      "id": "4d3abb54-cc2c-49f2-a3e6-590c33830831",
+      "name": "Structured Output Parser - Comprehensive1"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        288,
+        2368
+      ],
+      "id": "5118c93d-02f4-4176-a5e2-31392347a03d",
+      "name": "2nd Loop Over Items1"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        64,
+        2368
+      ],
+      "id": "5702e93a-f1ef-465d-97aa-d3e0979f93c2",
+      "name": "Loop Over Items1"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Set File Data1').item.json.cloudinary_url || $('Set File Data1').item.json.file_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "aff4c27f-8b5b-4728-ae9e-dc00bdae10e8",
+      "name": "Download File From URL1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        512,
+        2384
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "0f8bc803-94c0-4689-92de-1ae03bc6e1a0",
+              "name": "name",
+              "value": "={{ $json.body.file.name || $json.file.name || $json.name || 'document.pdf' }}",
+              "type": "string"
+            },
+            {
+              "id": "b215de7b-64c4-4125-8d5e-4445b5a7f85a",
+              "name": "file_url",
+              "value": "={{ $json.body.file.url || $json.file.url || $json.fileUrl }}",
+              "type": "string"
+            },
+            {
+              "id": "c3d4e5f6-7890-1234-5678-9abcdef01234",
+              "name": "processingId",
+              "value": "={{ $json.body.processingId || $json.processingId }}",
+              "type": "string"
+            },
+            {
+              "id": "d4e5f6a7-8901-2345-6789-bcdef0123456",
+              "name": "userId",
+              "value": "={{ $json.body.userId || $json.userId }}",
+              "type": "string"
+            },
+            {
+              "id": "e5f6a7b8-9012-3456-789a-cdef01234567",
+              "name": "department",
+              "value": "={{ $json.body.department || $json.department }}",
+              "type": "string"
+            },
+            {
+              "id": "f6a7b8c9-0123-4567-890a-bcdef0123456",
+              "name": "cloudinary_url",
+              "value": "={{ $json.body.file.cloudinary_url || $json.body.file.url || $json.file.cloudinary_url || $json.file.url }}",
+              "type": "string"
+            },
+            {
+              "id": "a7b8c9d0-1234-5678-901a-cdef01234567",
+              "name": "cloudinary_public_id",
+              "value": "={{ $json.body.file.cloudinary_public_id || $json.file.cloudinary_public_id }}",
+              "type": "string"
+            },
+            {
+              "id": "b8c9d0e1-2345-6789-012a-bcdef0123456",
+              "name": "webhook_url",
+              "value": "={{ $json.body.webhook_url || $json.webhook_url || '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "737f744f-de90-48ac-a2c3-aaa20684e984",
+      "name": "Set File Data1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        64,
+        2544
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "id": "66b1b931-7bad-433a-9d3b-baf831585b32",
+      "name": "Extract PDF Text1",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        736,
+        2384
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1184,
+        2176
+      ],
+      "id": "9a7d5d99-7822-41f3-beb1-cd3bdb134a50",
+      "name": "Google Gemini Chat Model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "91898OzbZbpGF2b2",
+          "name": "Google Gemini(PaLM) Api account 4"
         }
       }
     }
   ],
   "pinData": {},
   "connections": {
-    "Get Data from Postgres": {
+    "terminology_to_clarify": {
       "main": [
         [
           {
-            "node": "Respond to Webhook",
+            "node": "Merge",
+            "type": "main",
+            "index": 5
+          }
+        ]
+      ]
+    },
+    "follow_up_questions": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "gaps_and_limitations": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "key_takeaways": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "main_theme": {
+      "main": [
+        [
+          {
+            "node": "Merge",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Respond to Webhook": {
+    "document_summary": {
       "main": [
-        []
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
       ]
     },
     "Wait Before AI": {
@@ -369,7 +1277,29 @@
       "main": [
         [
           {
-            "node": "Get Data from Postgres",
+            "node": "Retrieve from Postgres Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Postgres Script": {
+      "main": [
+        [
+          {
+            "node": "Save Analysis to Postgres",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retrieve from Postgres Script": {
+      "main": [
+        [
+          {
+            "node": "Send HTTP Request to Flow 2",
             "type": "main",
             "index": 0
           }
@@ -380,18 +1310,7 @@
       "main": [
         [
           {
-            "node": "Format Data for Postgres",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Format Data for Postgres": {
-      "main": [
-        [
-          {
-            "node": "Save Analysis to Postgres",
+            "node": "Save to Postgres Script",
             "type": "main",
             "index": 0
           }
@@ -423,6 +1342,11 @@
     "Webhook": {
       "main": [
         [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          },
           {
             "node": "Loop Over Items",
             "type": "main",
@@ -504,13 +1428,455 @@
           }
         ]
       ]
+    },
+    "2️⃣ Chuẩn hóa dữ liệu đầu vào": {
+      "main": [
+        [
+          {
+            "node": "2.5️⃣ Download File từ Cloudinary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2.5️⃣ Download File từ Cloudinary": {
+      "main": [
+        [
+          {
+            "node": "2.6️⃣ Merge File Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2.6️⃣ Merge File Data": {
+      "main": [
+        [
+          {
+            "node": "2.7️⃣ Chuẩn bị Prompt GDPR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2.7️⃣ Chuẩn bị Prompt GDPR": {
+      "main": [
+        [
+          {
+            "node": "3️⃣ AI GDPR Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3️⃣ AI GDPR Decision": {
+      "main": [
+        [
+          {
+            "node": "4️⃣ Parse quyết định GDPR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4️⃣ Parse quyết định GDPR": {
+      "main": [
+        [
+          {
+            "node": "5️⃣ Hành động: Delete?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5️⃣ Hành động: Delete?": {
+      "main": [
+        [
+          {
+            "node": "7️⃣ Thực thi Delete/Revoke",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "6️⃣ Hành động: Anonymize?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6️⃣ Hành động: Anonymize?": {
+      "main": [
+        [
+          {
+            "node": "7️⃣ Thực thi Anonymize/Redact",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "7️⃣.5️⃣ Đặt trạng thái Allow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7️⃣ Thực thi Delete/Revoke": {
+      "main": [
+        [
+          {
+            "node": "7.8 Merge Actions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7️⃣ Thực thi Anonymize/Redact": {
+      "main": [
+        [
+          {
+            "node": "7.8 Merge Actions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7️⃣.5️⃣ Đặt trạng thái Allow": {
+      "main": [
+        [
+          {
+            "node": "7.8 Merge Actions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7.8 Merge Actions": {
+      "main": [
+        [
+          {
+            "node": "8️⃣ Cần thông báo DPO?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8️⃣ Cần thông báo DPO?": {
+      "main": [
+        [
+          {
+            "node": "9️⃣ Gửi email DPO",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "🔍 DEBUG: Kiểm tra dữ liệu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9️⃣ Gửi email DPO": {
+      "main": [
+        [
+          {
+            "node": "🔍 DEBUG: Kiểm tra dữ liệu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9.5️⃣ Chuẩn bị Email Data": {
+      "main": [
+        [
+          {
+            "node": "1️⃣0️⃣ Thông báo kết quả cho uploader",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1️⃣0️⃣ Thông báo kết quả cho uploader": {
+      "main": [
+        [
+          {
+            "node": "1️⃣1️⃣ Ghi log GDPR vào Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1️⃣1️⃣ Ghi log GDPR vào Sheets": {
+      "main": [
+        [
+          {
+            "node": "1️⃣2️⃣ Tạo Audit Trail GDPR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1️⃣2️⃣ Tạo Audit Trail GDPR": {
+      "main": [
+        [
+          {
+            "node": "1️⃣3️⃣ Chuẩn bị Data cho Flow 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1️⃣3️⃣ Chuẩn bị Data cho Flow 3": {
+      "main": [
+        [
+          {
+            "node": "1️⃣4️⃣ Gửi Data đến Flow 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔍 DEBUG: Kiểm tra dữ liệu": {
+      "main": [
+        [
+          {
+            "node": "9.5️⃣ Chuẩn bị Email Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1️⃣ Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "2️⃣ Chuẩn hóa dữ liệu đầu vào",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Postgres Script1": {
+      "main": [
+        [
+          {
+            "node": "Save Analysis to Postgres1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retrieve from Postgres Script1": {
+      "main": [
+        [
+          {
+            "node": "Send HTTP Request to Flow ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Loop Over Items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before AI1": {
+      "main": [
+        [
+          {
+            "node": "comprehensive_analysis1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Combined Result1": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "comprehensive_analysis1": {
+      "main": [
+        [
+          {
+            "node": "Parse Combined Result1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Analysis to Postgres1": {
+      "main": [
+        [
+          {
+            "node": "Retrieve from Postgres Script1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate1": {
+      "main": [
+        [
+          {
+            "node": "Save to Postgres Script1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Aggregate1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser - Comprehensive1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "comprehensive_analysis1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2nd Loop Over Items1": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Download File From URL1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items1": {
+      "main": [
+        [
+          {
+            "node": "2nd Loop Over Items1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set File Data1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download File From URL1": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF Text1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set File Data1": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF Text1": {
+      "main": [
+        [
+          {
+            "node": "Wait Before AI1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "comprehensive_analysis1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": true,
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
   },
-  "versionId": "ac5a0848-78f9-4300-9731-eb1c969cf0e0",
+  "versionId": "fdfcf60c-9144-43ce-968d-aeb612eebbc6",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "d29aff038a4897a8be0d9843c07ba06d6b485556105b19c20835a7b0bfd5b9b2"

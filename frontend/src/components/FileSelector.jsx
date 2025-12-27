@@ -13,7 +13,51 @@ function FileSelector({ onFileSelect, selectedFileId, filter }) {
   const loadFiles = async () => {
     try {
       setLoading(true);
-      // Lấy từ PostgreSQL để có đầy đủ thông tin
+      
+      // Nếu filter là 'for-gdpr' hoặc 'for-sharing', fetch từ endpoint /gdpr để lấy các file đã có kết quả phân tích
+      if (filter === 'for-gdpr' || filter === 'for-sharing') {
+        const response = await fetch('/gdpr?limit=100&has_analysis=true');
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        let allFiles = data.success ? data.data : [];
+        
+        // Lọc theo filter
+        if (filter === 'for-gdpr') {
+          // Chỉ lấy file đã có analysis, chưa có GDPR result
+          allFiles = allFiles.filter(file => {
+            return file.has_analysis && !file.has_gdpr_result;
+          });
+        } else if (filter === 'for-sharing') {
+          // Chỉ lấy file có GDPR decision là 'allow' hoặc 'anonymize' (có thể chia sẻ)
+          // Hoặc chưa có GDPR result nhưng đã có analysis (có thể gửi đi để kiểm tra GDPR)
+          allFiles = allFiles.filter(file => {
+            if (file.has_gdpr_result && file.gdpr_result) {
+              const decision = file.gdpr_result.gdpr_decision?.toLowerCase();
+              return decision === 'allow' || decision === 'anonymize';
+            }
+            // Chưa có GDPR result nhưng đã có analysis - có thể gửi đi
+            return file.has_analysis && !file.has_gdpr_result;
+          });
+        }
+        
+        // Sắp xếp theo thời gian tạo (mới nhất trước)
+        allFiles.sort((a, b) => {
+          const dateA = new Date(a.created_at || 0);
+          const dateB = new Date(b.created_at || 0);
+          return dateB - dateA;
+        });
+        
+        setFiles(allFiles);
+        setError(null);
+        setLoading(false);
+        return;
+      }
+      
+      // Các filter khác, lấy từ PostgreSQL documents table
       const response = await fetch('/api/document/get-all-completed?limit=100');
       
       if (!response.ok) {
@@ -22,38 +66,6 @@ function FileSelector({ onFileSelect, selectedFileId, filter }) {
       
       const data = await response.json();
       let allFiles = data.success ? data.data : [];
-      
-      // Lọc theo filter
-      if (filter === 'for-gdpr') {
-        // Chỉ lấy file đã có analysis, chưa có GDPR
-        allFiles = allFiles.filter(file => {
-          // Kiểm tra có analysis results
-          const hasAnalysis = file.analysis_results?.analysis || 
-                             (file.analysis_results && 
-                              typeof file.analysis_results === 'object' &&
-                              Object.keys(file.analysis_results).length > 0 &&
-                              !file.analysis_results.gdpr); // Đảm bảo chưa có GDPR
-          // Chưa có GDPR result
-          const hasGdpr = file.analysis_results?.gdpr;
-          return hasAnalysis && !hasGdpr;
-        });
-      } else if (filter === 'for-sharing') {
-        // Chỉ lấy file đã có GDPR completed (approve hoặc review), chưa có sharing
-        allFiles = allFiles.filter(file => {
-          const gdprResult = file.analysis_results?.gdpr;
-          if (!gdprResult) return false;
-          
-          const decision = gdprResult.gdprDecision?.toLowerCase();
-          const hasGdprCompleted = decision === 'approve' || 
-                                   decision === 'approved' || 
-                                   decision === 'review';
-          
-          // Chưa có sharing result
-          const hasSharing = file.analysis_results?.sharing;
-          
-          return hasGdprCompleted && !hasSharing;
-        });
-      }
       
       // Sắp xếp theo thời gian tạo (mới nhất trước)
       allFiles.sort((a, b) => {
@@ -166,7 +178,7 @@ function FileSelector({ onFileSelect, selectedFileId, filter }) {
         {files.map((file) => (
           <div
             key={file.processing_id || file.id}
-            className={`file-item-modern ${selectedFileId === file.processing_id ? 'selected' : ''}`}
+            className={`file-item-modern ${selectedFileId === (file.processing_id || file.id) ? 'selected' : ''}`}
             onClick={() => onFileSelect && onFileSelect(file)}
             style={{
               borderColor: selectedFileId === file.processing_id ? 'var(--purple-primary)' : 'var(--gray-200)',
@@ -180,11 +192,39 @@ function FileSelector({ onFileSelect, selectedFileId, filter }) {
                 <div className="file-name-modern">{file.file_name || 'Unknown'}</div>
                 <div className="file-meta-modern">
                   {file.department && <span className="filter-tag">{file.department}</span>}
+                  {file.gdpr_result?.gdpr_decision && (
+                    <>
+                      <span>•</span>
+                      <span className="filter-tag" style={{
+                        backgroundColor: file.gdpr_result.gdpr_decision === 'allow' ? 'var(--success-bg)' : 
+                                        file.gdpr_result.gdpr_decision === 'anonymize' ? 'var(--warning-bg)' : 
+                                        'var(--error-bg)',
+                        color: file.gdpr_result.gdpr_decision === 'allow' ? 'var(--success)' : 
+                               file.gdpr_result.gdpr_decision === 'anonymize' ? 'var(--warning)' : 
+                               'var(--error)'
+                      }}>
+                        {file.gdpr_result.gdpr_decision === 'allow' ? '✅ Cho phép' : 
+                         file.gdpr_result.gdpr_decision === 'anonymize' ? '🔒 Ẩn danh' : 
+                         file.gdpr_result.gdpr_decision === 'delete' ? '❌ Xóa' : file.gdpr_result.gdpr_decision}
+                      </span>
+                    </>
+                  )}
+                  {!file.has_gdpr_result && file.has_analysis && (
+                    <>
+                      <span>•</span>
+                      <span className="filter-tag" style={{
+                        backgroundColor: 'var(--info-bg)',
+                        color: 'var(--info)'
+                      }}>
+                        ⏳ Chưa kiểm tra GDPR
+                      </span>
+                    </>
+                  )}
                   <span>•</span>
-                  <span>{formatDate(file.created_at)}</span>
+                  <span>{formatDate(file.created_at || file.gdpr_result?.gdpr_completed_at)}</span>
                 </div>
               </div>
-              {selectedFileId === file.processing_id && (
+              {selectedFileId === (file.processing_id || file.id) && (
                 <span style={{ color: 'var(--purple-primary)', fontSize: '1.5rem' }}>✓</span>
               )}
             </div>
