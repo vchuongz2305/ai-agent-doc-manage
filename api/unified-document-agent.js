@@ -217,27 +217,192 @@ const pgPool = new Pool({
   password: process.env.POSTGRES_PASSWORD || '',
   max: 20, // Maximum number of clients in the pool
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 10000, // Tăng từ 2s lên 10s
+  statement_timeout: 30000, // 30 seconds for query timeout
+  query_timeout: 30000,
 });
+
+// Track PostgreSQL connection status with circuit breaker pattern
+let pgConnectionStatus = {
+  connected: false,
+  lastCheck: null,
+  error: null,
+  consecutiveFailures: 0,
+  circuitOpen: false,
+  circuitOpenUntil: null,
+  circuitBreakerWarningLogged: false // Track if we've already logged the warning
+};
+
+// Circuit breaker configuration
+const CIRCUIT_BREAKER_THRESHOLD = 3; // Open circuit after 3 consecutive failures
+const CIRCUIT_BREAKER_TIMEOUT = 30000; // Keep circuit open for 30 seconds
 
 // Test PostgreSQL connection on startup
 pgPool.on('connect', () => {
   console.log('✅ PostgreSQL connection established');
+  pgConnectionStatus.connected = true;
+  pgConnectionStatus.error = null;
 });
 
 pgPool.on('error', (err) => {
-  console.error('❌ Unexpected PostgreSQL error:', err);
+  console.error('❌ Unexpected PostgreSQL error:', err.message);
+  pgConnectionStatus.connected = false;
+  pgConnectionStatus.error = err.message;
 });
 
-// Test connection
-pgPool.query('SELECT NOW()', (err, res) => {
-  if (err) {
-    console.warn('⚠️ PostgreSQL connection test failed:', err.message);
-    console.warn('   Make sure PostgreSQL is running and credentials are correct');
-  } else {
-    console.log('✅ PostgreSQL connection test successful');
+// Helper function to check PostgreSQL connection
+async function checkPostgresConnection() {
+  try {
+    const result = await pgPool.query('SELECT NOW()');
+    pgConnectionStatus.connected = true;
+    pgConnectionStatus.lastCheck = new Date();
+    pgConnectionStatus.error = null;
+    pgConnectionStatus.consecutiveFailures = 0;
+    pgConnectionStatus.circuitOpen = false;
+    pgConnectionStatus.circuitOpenUntil = null;
+    return true;
+  } catch (err) {
+    pgConnectionStatus.connected = false;
+    pgConnectionStatus.lastCheck = new Date();
+    pgConnectionStatus.error = err.message;
+    pgConnectionStatus.consecutiveFailures++;
+    
+    // Open circuit breaker if threshold reached
+    if (pgConnectionStatus.consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD && !pgConnectionStatus.circuitOpen) {
+      pgConnectionStatus.circuitOpen = true;
+      pgConnectionStatus.circuitOpenUntil = new Date(Date.now() + CIRCUIT_BREAKER_TIMEOUT);
+      pgConnectionStatus.circuitBreakerWarningLogged = false; // Reset warning flag
+      console.warn(`⚠️ PostgreSQL circuit breaker OPENED (${pgConnectionStatus.consecutiveFailures} failures). Will retry after ${CIRCUIT_BREAKER_TIMEOUT/1000}s`);
+    }
+    return false;
   }
-});
+}
+
+// Check if circuit breaker should be closed (retry allowed)
+function isCircuitBreakerOpen() {
+  if (!pgConnectionStatus.circuitOpen) {
+    return false;
+  }
+  
+  // Check if timeout has passed
+  if (pgConnectionStatus.circuitOpenUntil && new Date() > pgConnectionStatus.circuitOpenUntil) {
+    console.log('🔄 PostgreSQL circuit breaker CLOSED - attempting reconnection');
+    pgConnectionStatus.circuitOpen = false;
+    pgConnectionStatus.circuitOpenUntil = null;
+    pgConnectionStatus.consecutiveFailures = 0;
+    pgConnectionStatus.circuitBreakerWarningLogged = false; // Reset warning flag
+    return false;
+  }
+  
+  return true;
+}
+
+// Test connection on startup (non-blocking)
+setTimeout(async () => {
+  const isConnected = await checkPostgresConnection();
+  if (isConnected) {
+    console.log('✅ PostgreSQL connection test successful');
+  } else {
+    console.warn('⚠️ PostgreSQL connection test failed:', pgConnectionStatus.error);
+    console.warn('   Make sure PostgreSQL is running and credentials are correct');
+    console.warn('   The application will continue but database features may not work');
+  }
+}, 1000);
+
+// Helper function to safely execute PostgreSQL queries with retry and circuit breaker
+async function safePgQuery(query, params = [], retries = 1) {
+  // Check circuit breaker first
+  if (isCircuitBreakerOpen()) {
+    const waitTime = Math.ceil((pgConnectionStatus.circuitOpenUntil - new Date()) / 1000);
+    return { 
+      success: false, 
+      error: 'PostgreSQL circuit breaker is open',
+      message: `Database unavailable. Circuit breaker will retry in ${waitTime}s`,
+      circuitBreakerOpen: true
+    };
+  }
+  
+  // If we know database is down, reduce retries
+  const maxRetries = pgConnectionStatus.connected ? retries : 0;
+  
+  for (let i = 0; i <= maxRetries; i++) {
+    try {
+      // Only check connection on first attempt if not connected
+      if (!pgConnectionStatus.connected && i === 0) {
+        const checked = await checkPostgresConnection();
+        if (!checked && isCircuitBreakerOpen()) {
+          return { 
+            success: false, 
+            error: 'PostgreSQL circuit breaker is open',
+            message: 'Database unavailable',
+            circuitBreakerOpen: true
+          };
+        }
+      }
+      
+      const result = await pgPool.query(query, params);
+      
+      // Success - reset failure counter
+      if (pgConnectionStatus.consecutiveFailures > 0) {
+        pgConnectionStatus.consecutiveFailures = 0;
+        pgConnectionStatus.connected = true;
+      }
+      
+      return { success: true, data: result };
+    } catch (error) {
+      const isLastAttempt = i === maxRetries;
+      
+      if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED' || error.message.includes('timeout')) {
+        pgConnectionStatus.connected = false;
+        pgConnectionStatus.consecutiveFailures++;
+        
+        // Open circuit breaker if threshold reached
+        if (pgConnectionStatus.consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD && !pgConnectionStatus.circuitOpen) {
+          pgConnectionStatus.circuitOpen = true;
+          pgConnectionStatus.circuitOpenUntil = new Date(Date.now() + CIRCUIT_BREAKER_TIMEOUT);
+          pgConnectionStatus.circuitBreakerWarningLogged = false; // Reset warning flag
+          console.warn(`⚠️ PostgreSQL circuit breaker OPENED (${pgConnectionStatus.consecutiveFailures} failures)`);
+        }
+        
+        if (isLastAttempt) {
+          // Only log error if not in circuit breaker mode (to reduce noise)
+          if (!isCircuitBreakerOpen()) {
+            console.error(`❌ PostgreSQL query failed after ${maxRetries + 1} attempts:`, error.message);
+          }
+          return { 
+            success: false, 
+            error: 'PostgreSQL connection timeout',
+            message: error.message 
+          };
+        }
+        
+        // Wait before retry (exponential backoff) - only if not in circuit breaker
+        if (!isCircuitBreakerOpen()) {
+          await new Promise(resolve => setTimeout(resolve, 500 * (i + 1)));
+        } else {
+          break; // Exit loop if circuit breaker opened
+        }
+        continue;
+      }
+      
+      // For other errors, return immediately
+      console.error('❌ PostgreSQL query error:', error.message);
+      return { 
+        success: false, 
+        error: 'PostgreSQL query failed',
+        message: error.message 
+      };
+    }
+  }
+  
+  // If we get here, circuit breaker was opened during retry
+  return { 
+    success: false, 
+    error: 'PostgreSQL circuit breaker is open',
+    message: 'Database unavailable',
+    circuitBreakerOpen: true
+  };
+}
 
 // Unified Document Processing Endpoint
 // GET handler - returns endpoint information
@@ -2022,6 +2187,33 @@ app.get('/gdpr', async (req, res) => {
       has_analysis = true // Chỉ lấy file đã có kết quả phân tích
     } = req.query;
     
+    // Early return if circuit breaker is open - no need to process query
+    if (isCircuitBreakerOpen()) {
+      const waitTime = Math.ceil((pgConnectionStatus.circuitOpenUntil - new Date()) / 1000);
+      // Only log once per circuit breaker period to reduce noise
+      if (!pgConnectionStatus.circuitBreakerWarningLogged) {
+        console.warn(`⚠️ PostgreSQL circuit breaker is OPEN - returning empty data (will retry in ${waitTime}s)`);
+        pgConnectionStatus.circuitBreakerWarningLogged = true;
+      }
+      return res.status(503).json({
+        success: false,
+        error: 'Database temporarily unavailable',
+        message: `Circuit breaker is open. Will retry in ${waitTime}s`,
+        data: [],
+        pagination: {
+          total: 0,
+          limit: parseInt(limit) || 12,
+          offset: parseInt(offset) || 0,
+          hasMore: false
+        }
+      });
+    }
+    
+    // Reset warning flag when circuit breaker closes
+    if (pgConnectionStatus.circuitBreakerWarningLogged && !isCircuitBreakerOpen()) {
+      pgConnectionStatus.circuitBreakerWarningLogged = false;
+    }
+    
     console.log(`📊 Fetching documents with analysis and GDPR results from PostgreSQL:`, {
       limit,
       offset,
@@ -2137,16 +2329,35 @@ app.get('/gdpr', async (req, res) => {
     
     const countParams = queryParams.slice(0, -2); // Remove limit and offset
     
-    // Execute both queries in parallel
+    // Execute both queries in parallel with safe error handling
     const [result, countResult] = await Promise.all([
-      pgPool.query(query, queryParams),
-      pgPool.query(countQuery, countParams)
+      safePgQuery(query, queryParams),
+      safePgQuery(countQuery, countParams)
     ]);
     
-    const total = parseInt(countResult.rows[0].count);
+    // Check if queries failed
+    if (!result.success) {
+      // Only log if not circuit breaker (to reduce noise)
+      if (!result.circuitBreakerOpen) {
+        console.error('❌ Failed to fetch documents:', result.message);
+      }
+      return res.status(503).json({
+        success: false,
+        error: 'Database temporarily unavailable',
+        message: result.message,
+        data: [] // Return empty array instead of crashing
+      });
+    }
+    
+    if (!countResult.success) {
+      console.error('❌ Failed to count documents:', countResult.message);
+      // Continue with result even if count fails
+    }
+    
+    const total = countResult.success ? parseInt(countResult.data.rows[0].count) : result.data.rows.length;
     
     // Format kết quả để dễ sử dụng ở frontend
-    const formattedResults = result.rows.map(row => ({
+    const formattedResults = result.data.rows.map(row => ({
       // Thông tin file cơ bản
       id: row.document_id,
       processing_id: row.processing_id,
@@ -2206,10 +2417,18 @@ app.get('/gdpr', async (req, res) => {
     
   } catch (error) {
     console.error('❌ Error fetching documents with GDPR results from PostgreSQL:', error);
-    res.status(500).json({
+    // Return empty array instead of error to prevent frontend crashes
+    res.status(503).json({
       success: false,
-      error: 'Failed to fetch documents with GDPR results from PostgreSQL',
-      message: error.message
+      error: 'Database temporarily unavailable',
+      message: error.message,
+      data: [],
+      pagination: {
+        total: 0,
+        limit: parseInt(limit) || 12,
+        offset: parseInt(offset) || 0,
+        hasMore: false
+      }
     });
   }
 });
@@ -2226,6 +2445,17 @@ app.get('/gdpr/:processingId', async (req, res) => {
       return res.status(400).json({
         success: false,
         error: 'processingId is required'
+      });
+    }
+    
+    // Early return if circuit breaker is open
+    if (isCircuitBreakerOpen()) {
+      const waitTime = Math.ceil((pgConnectionStatus.circuitOpenUntil - new Date()) / 1000);
+      return res.status(503).json({
+        success: false,
+        error: 'Database temporarily unavailable',
+        message: `Circuit breaker is open. Will retry in ${waitTime}s`,
+        processingId: processingId
       });
     }
     
@@ -2274,9 +2504,19 @@ app.get('/gdpr/:processingId', async (req, res) => {
       LIMIT 1
     `;
     
-    const result = await pgPool.query(query, [processingId]);
+    const queryResult = await safePgQuery(query, [processingId]);
     
-    if (result.rows.length === 0) {
+    if (!queryResult.success) {
+      console.error('❌ Failed to fetch document:', queryResult.message);
+      return res.status(503).json({
+        success: false,
+        error: 'Database temporarily unavailable',
+        message: queryResult.message,
+        processingId: processingId
+      });
+    }
+    
+    if (queryResult.data.rows.length === 0) {
       return res.status(404).json({
         success: false,
         error: 'Document not found',
@@ -2284,7 +2524,7 @@ app.get('/gdpr/:processingId', async (req, res) => {
       });
     }
     
-    const row = result.rows[0];
+    const row = queryResult.data.rows[0];
     
     // Format kết quả
     const formattedResult = {
@@ -2340,10 +2580,11 @@ app.get('/gdpr/:processingId', async (req, res) => {
     
   } catch (error) {
     console.error('❌ Error fetching document with GDPR result from PostgreSQL:', error);
-    res.status(500).json({
+    res.status(503).json({
       success: false,
-      error: 'Failed to fetch document with GDPR result from PostgreSQL',
-      message: error.message
+      error: 'Database temporarily unavailable',
+      message: error.message,
+      processingId: req.params.processingId
     });
   }
 });
@@ -2360,6 +2601,20 @@ app.get('/gdpr/:processingId', async (req, res) => {
 app.get('/api/approvals/list', async (req, res) => {
   try {
     const { status = 'ALL' } = req.query;
+    
+    // Early return if circuit breaker is open
+    if (isCircuitBreakerOpen()) {
+      const waitTime = Math.ceil((pgConnectionStatus.circuitOpenUntil - new Date()) / 1000);
+      if (!pgConnectionStatus.circuitBreakerWarningLogged) {
+        console.warn(`⚠️ PostgreSQL circuit breaker is OPEN - returning empty approvals (will retry in ${waitTime}s)`);
+      }
+      return res.status(503).json({
+        success: false,
+        error: 'Database temporarily unavailable',
+        message: `Circuit breaker is open. Will retry in ${waitTime}s`,
+        approvals: []
+      });
+    }
     
     console.log(`📊 Fetching approvals list with status: ${status}`);
     
@@ -2407,10 +2662,23 @@ app.get('/api/approvals/list', async (req, res) => {
     
     query += ` ORDER BY created_at DESC LIMIT 100`;
     
-    const result = await pgPool.query(query, queryParams);
+    const queryResult = await safePgQuery(query, queryParams);
+    
+    if (!queryResult.success) {
+      // Only log if not circuit breaker (to reduce noise)
+      if (!queryResult.circuitBreakerOpen) {
+        console.error('❌ Failed to fetch approvals:', queryResult.message);
+      }
+      return res.status(503).json({
+        success: false,
+        error: 'Database temporarily unavailable',
+        message: queryResult.message,
+        approvals: [] // Return empty array to prevent frontend crashes
+      });
+    }
     
     // Format approvals
-    const approvals = result.rows.map(row => ({
+    const approvals = queryResult.data.rows.map(row => ({
       uniqueKey: row.uniquekey || row.sharing_id,
       documentTitle: row.documenttitle || row.file_name,
       documentCategory: row.documentcategory || row.department,
@@ -2438,9 +2706,9 @@ app.get('/api/approvals/list', async (req, res) => {
     
   } catch (error) {
     console.error('❌ Error fetching approvals:', error);
-    res.status(500).json({
+    res.status(503).json({
       success: false,
-      error: 'Failed to fetch approvals',
+      error: 'Database temporarily unavailable',
       message: error.message,
       approvals: [] // Trả về empty array để frontend không bị lỗi
     });
@@ -2716,6 +2984,58 @@ app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 // Serve static files (users.json) - after API routes
 app.use(express.static(path.join(__dirname, '..')));
 app.use('/api/users', express.static(path.join(__dirname, 'users.json')));
+
+// ============================================
+// Health Check & Status Endpoints
+// ============================================
+
+/**
+ * GET /api/health
+ * Health check endpoint
+ */
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
+/**
+ * GET /api/health/postgres
+ * PostgreSQL connection status
+ */
+app.get('/api/health/postgres', async (req, res) => {
+  const status = {
+    connected: pgConnectionStatus.connected,
+    lastCheck: pgConnectionStatus.lastCheck,
+    error: pgConnectionStatus.error,
+    circuitBreaker: {
+      open: pgConnectionStatus.circuitOpen,
+      openUntil: pgConnectionStatus.circuitOpenUntil,
+      consecutiveFailures: pgConnectionStatus.consecutiveFailures
+    }
+  };
+  
+  // Try to check connection if not recently checked (older than 5 seconds)
+  const shouldCheck = !pgConnectionStatus.lastCheck || 
+    (new Date() - pgConnectionStatus.lastCheck) > 5000;
+  
+  if (shouldCheck && !isCircuitBreakerOpen()) {
+    await checkPostgresConnection();
+    status.connected = pgConnectionStatus.connected;
+    status.lastCheck = pgConnectionStatus.lastCheck;
+    status.error = pgConnectionStatus.error;
+    status.circuitBreaker.open = pgConnectionStatus.circuitOpen;
+    status.circuitBreaker.openUntil = pgConnectionStatus.circuitOpenUntil;
+    status.circuitBreaker.consecutiveFailures = pgConnectionStatus.consecutiveFailures;
+  }
+  
+  res.json({
+    success: true,
+    postgres: status
+  });
+});
 
 // Error handling middleware (must be after all routes)
 app.use((error, req, res, next) => {
