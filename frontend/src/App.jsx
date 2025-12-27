@@ -10,14 +10,16 @@ import './App.css';
 function App() {
   return (
     <Router>
-      <div className="app">
+      <div className="app-modern">
         <Navigation />
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/analyze" element={<AnalyzePage />} />
-          <Route path="/gdpr" element={<GDPRPage />} />
-          <Route path="/sharing" element={<SharingPage />} />
-        </Routes>
+        <main className="main-content">
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/analyze" element={<AnalyzePage />} />
+            <Route path="/gdpr" element={<GDPRPage />} />
+            <Route path="/sharing" element={<SharingPage />} />
+          </Routes>
+        </main>
       </div>
     </Router>
   );

@@ -186,27 +186,52 @@ function AnalyzePage() {
   };
 
   return (
-    <div className="page-container">
-      <div className="page-header">
-        <h1>🔍 Phân Tích Tài Liệu</h1>
-        <p>Upload và phân tích tài liệu với AI</p>
+    <div className="modern-page">
+      <div className="modern-header">
+        <div>
+          <h1>Phân Tích Tài Liệu</h1>
+          <p>Upload và phân tích tài liệu với AI</p>
+        </div>
+        <div className="header-actions">
+          <div className="search-box">
+            <span className="search-icon">🔍</span>
+            <input type="text" placeholder="Search by job title, company, keywords" />
+          </div>
+          <div className="user-profile">
+            <div className="user-avatar">AD</div>
+            <span>Anne Douglas</span>
+            <span>▼</span>
+          </div>
+        </div>
       </div>
 
-      <div className="page-content">
-        <div className="upload-section">
-          <h2>📁 Upload Tài Liệu</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '32px' }}>
+        <div className="modern-card">
+          <div className="card-header">
+            <div>
+              <div className="card-title">Upload Tài Liệu</div>
+              <div className="card-subtitle">Chọn file để phân tích</div>
+            </div>
+          </div>
           <form onSubmit={handleSubmit}>
             <div 
-              className="file-upload"
+              className={`upload-card ${file ? 'has-file' : ''}`}
               onDragOver={handleDragOver}
               onDrop={handleDrop}
               onClick={() => document.getElementById('fileInput').click()}
             >
-              <div className="upload-icon">📄</div>
-              <div className="upload-text">
-                {file ? `Đã chọn: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)` : 'Click để upload hoặc kéo thả file'}
+              <span className="upload-icon-large">📄</span>
+              <div className="upload-text-large">
+                {file ? `Đã chọn: ${file.name}` : 'Click để upload hoặc kéo thả file'}
               </div>
-              <div className="upload-hint">Hỗ trợ: PDF, Word, Excel, PowerPoint, Images</div>
+              {file && (
+                <div className="upload-hint-text">
+                  {(file.size / 1024 / 1024).toFixed(2)} MB
+                </div>
+              )}
+              {!file && (
+                <div className="upload-hint-text">Hỗ trợ: PDF, Word, Excel, PowerPoint, Images</div>
+              )}
               <input 
                 type="file" 
                 id="fileInput" 
@@ -216,21 +241,21 @@ function AnalyzePage() {
               />
             </div>
 
-            <button type="submit" className="btn" disabled={loading || isAnalyzing}>
+            <button type="submit" className="btn-modern btn-primary" disabled={loading || isAnalyzing} style={{ width: '100%', marginTop: '16px' }}>
               {loading || isAnalyzing ? '🔄 Đang phân tích...' : '🚀 Phân Tích Tài Liệu'}
             </button>
           </form>
 
           {(loading || isAnalyzing) && (
-            <div className="loading">
-              <div className="spinner"></div>
+            <div className="loading-modern">
+              <div className="spinner-modern"></div>
               <div>
                 {isAnalyzing 
                   ? 'Đang chờ kết quả từ workflow...' 
                   : 'Đang gửi file lên server...'}
               </div>
               {isAnalyzing && status && (
-                <div style={{ marginTop: '10px', fontSize: '0.9rem', color: '#718096' }}>
+                <div style={{ marginTop: '10px', fontSize: '0.9rem', color: '#6B7280' }}>
                   Trạng thái: {status.steps?.analysis === 'processing' ? 'Đang xử lý' : 
                                status.steps?.analysis === 'pending' ? 'Đang chờ' : 
                                status.steps?.analysis || 'Đang khởi tạo...'}
@@ -240,69 +265,75 @@ function AnalyzePage() {
           )}
         </div>
 
-        {/* Status Section */}
-        <div className="status-section">
-          <h2>📊 Trạng Thái Phân Tích</h2>
-          <div className="status-container">
+        <div className="modern-card">
+          <div className="card-header">
+            <div>
+              <div className="card-title">Trạng Thái Phân Tích</div>
+              <div className="card-subtitle">Theo dõi tiến trình</div>
+            </div>
+          </div>
+          <div className="status-grid">
             {status ? (
-              <div className="status-item">
-                <span className="status-text">Phân Tích Tài Liệu</span>
-                <span className="status-icon">{getStatusIcon(status.steps?.analysis)}</span>
+              <div className={`status-card ${status.steps?.analysis === 'completed' ? 'completed' : status.steps?.analysis === 'processing' ? 'processing' : 'pending'}`}>
+                <div className="status-label">Phân Tích Tài Liệu</div>
+                <div className="status-value">{getStatusIcon(status.steps?.analysis)} {status.steps?.analysis === 'completed' ? 'Hoàn thành' : status.steps?.analysis === 'processing' ? 'Đang xử lý' : 'Chờ xử lý'}</div>
               </div>
             ) : (
-              <div className="status-item pending">
-                <span className="status-text">Chờ tài liệu...</span>
-                <span className="status-icon">⏳</span>
+              <div className="status-card">
+                <div className="status-label">Trạng thái</div>
+                <div className="status-value">⏳ Chờ tài liệu...</div>
               </div>
             )}
           </div>
         </div>
-
-        {/* Results Section */}
-        {result && (
-          <div className="results-section">
-            <h2>📋 Kết Quả Phân Tích</h2>
-            <div className="results-container">
-              <div className="result-card">
-                <h3>🔍 Kết Quả Phân Tích</h3>
-                <div className="result-content">
-                  {status?.fileName && <p><strong>File:</strong> {status.fileName}</p>}
-                  {status?.fileSize && <p><strong>Kích thước:</strong> {(status.fileSize / 1024 / 1024).toFixed(2)} MB</p>}
-                  {status?.mimeType && <p><strong>Loại:</strong> {status.mimeType}</p>}
-                  <p><strong>Phân tích hoàn tất thành công</strong></p>
-                  {result.summary && <p><strong>Tóm tắt:</strong> {result.summary}</p>}
-                  {result.category && <p><strong>Danh mục:</strong> {result.category}</p>}
-                </div>
-              </div>
-
-              {status?.docx_url && (
-                <div className="result-card">
-                  <h3>📄 Tài Liệu Phân Tích (DOCX)</h3>
-                  <div className="result-content">
-                    <p><strong>File:</strong> Tài liệu phân tích đã được tạo và lưu trên Cloudinary</p>
-                    <a 
-                      href={status.docx_url} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="btn"
-                      style={{ marginTop: '10px', display: 'inline-block' }}
-                    >
-                      📥 Tải Xuống DOCX
-                    </a>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Danh sách file đã phân tích */}
-      <div className="analyzed-files-wrapper">
+      {result && (
+        <div className="modern-card" style={{ marginBottom: '32px' }}>
+          <div className="card-header">
+            <div>
+              <div className="card-title">Kết Quả Phân Tích</div>
+              <div className="card-subtitle">Thông tin chi tiết</div>
+            </div>
+          </div>
+          <div className="results-grid">
+            <div className="result-card-modern">
+              <h3>Kết Quả Phân Tích</h3>
+              <div className="result-content-modern">
+                {status?.fileName && <p><strong>File:</strong> {status.fileName}</p>}
+                {status?.fileSize && <p><strong>Kích thước:</strong> {(status.fileSize / 1024 / 1024).toFixed(2)} MB</p>}
+                {status?.mimeType && <p><strong>Loại:</strong> {status.mimeType}</p>}
+                <p><strong>Phân tích hoàn tất thành công</strong></p>
+                {result.summary && <p><strong>Tóm tắt:</strong> {result.summary}</p>}
+                {result.category && <p><strong>Danh mục:</strong> {result.category}</p>}
+              </div>
+            </div>
+
+            {status?.docx_url && (
+              <div className="result-card-modern">
+                <h3>Tài Liệu Phân Tích (DOCX)</h3>
+                <div className="result-content-modern">
+                  <p><strong>File:</strong> Tài liệu phân tích đã được tạo và lưu trên Cloudinary</p>
+                  <a 
+                    href={status.docx_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="btn-modern btn-primary"
+                    style={{ marginTop: '16px', display: 'inline-block' }}
+                  >
+                    📥 Tải Xuống DOCX
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="modern-card">
         <AnalyzedFilesList ref={filesListRef} onFileSelect={setSelectedFile} />
       </div>
 
-      {/* Modal xem chi tiết file */}
       {selectedFile && (
         <FileDetailModal 
           file={selectedFile} 

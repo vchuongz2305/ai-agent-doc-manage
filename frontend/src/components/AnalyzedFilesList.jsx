@@ -68,83 +68,75 @@ const AnalyzedFilesList = forwardRef(({ onFileSelect }, ref) => {
     return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
   };
 
-  if (loading) {
-    return (
-      <div className="analyzed-files-section">
-        <h2>📚 Tài Liệu Đã Phân Tích</h2>
-        <div className="loading">
-          <div className="spinner"></div>
-          <div>Đang tải danh sách...</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="analyzed-files-section">
-        <h2>📚 Tài Liệu Đã Phân Tích</h2>
-        <div className="alert error">
-          {error}
-          <button onClick={loadAnalyzedFiles} className="retry-btn" style={{ marginTop: '10px' }}>
-            🔄 Thử lại
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="analyzed-files-section">
-      <div className="section-header">
-        <h2>📚 Tài Liệu Đã Phân Tích</h2>
-        <button onClick={loadAnalyzedFiles} className="refresh-btn" title="Làm mới danh sách">
+    <div>
+      <div className="card-header">
+        <div>
+          <div className="card-title">Tài Liệu Đã Phân Tích</div>
+          <div className="card-subtitle">Danh sách các file đã được phân tích</div>
+        </div>
+        <button onClick={loadAnalyzedFiles} className="btn-modern btn-secondary" title="Làm mới danh sách">
           🔄
         </button>
       </div>
       
-      {files.length === 0 ? (
-        <div className="alert info">
-          Chưa có tài liệu nào được phân tích. Hãy upload và phân tích tài liệu đầu tiên!
+      {loading ? (
+        <div className="loading-modern">
+          <div className="spinner-modern"></div>
+          <div>Đang tải danh sách...</div>
+        </div>
+      ) : error ? (
+        <div className="modern-card" style={{ textAlign: 'center', padding: '40px' }}>
+          <p style={{ color: 'var(--error)', marginBottom: '16px' }}>{error}</p>
+          <button onClick={loadAnalyzedFiles} className="btn-modern btn-primary">
+            🔄 Thử lại
+          </button>
+        </div>
+      ) : files.length === 0 ? (
+        <div className="modern-card" style={{ textAlign: 'center', padding: '40px' }}>
+          <p style={{ color: 'var(--gray-500)' }}>Chưa có tài liệu nào được phân tích. Hãy upload và phân tích tài liệu đầu tiên!</p>
         </div>
       ) : (
-        <div className="files-list">
+        <div className="file-list-modern">
           {files.map((file) => (
             <div 
               key={file.id} 
-              className="file-item"
+              className="file-item-modern"
               onClick={() => onFileSelect && onFileSelect(file)}
             >
-              <div className="file-item-header">
-                <div className="file-icon">📄</div>
-                <div className="file-info">
-                  <h3 className="file-name">{file.fileName || 'Unknown'}</h3>
-                  <div className="file-meta">
-                    <span className="file-size">{formatFileSize(file.fileSize)}</span>
-                    <span className="file-separator">•</span>
-                    <span className="file-date">{formatDate(file.createdAt)}</span>
+              <div className="file-header-modern">
+                <span className="file-icon-modern">📄</span>
+                <div style={{ flex: 1 }}>
+                  <div className="file-name-modern">{file.fileName || 'Unknown'}</div>
+                  <div className="file-meta-modern">
+                    <span>{formatFileSize(file.fileSize)}</span>
+                    <span>•</span>
+                    <span>{formatDate(file.createdAt)}</span>
                   </div>
                 </div>
-                <div className="file-actions">
+                <div style={{ display: 'flex', gap: '8px' }}>
                   {file.docx_url && (
                     <a 
                       href={file.docx_url} 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="download-btn"
+                      className="btn-modern btn-secondary"
                       onClick={(e) => e.stopPropagation()}
                       title="Tải xuống DOCX"
+                      style={{ padding: '8px 12px' }}
                     >
                       📥
                     </a>
                   )}
                   <button 
-                    className="view-btn"
+                    className="btn-modern btn-primary"
                     onClick={(e) => {
                       e.stopPropagation();
                       onFileSelect && onFileSelect(file);
                     }}
                     title="Xem chi tiết"
+                    style={{ padding: '8px 12px' }}
                   >
                     👁️
                   </button>
@@ -152,15 +144,15 @@ const AnalyzedFilesList = forwardRef(({ onFileSelect }, ref) => {
               </div>
               
               {file.results?.analysis && (
-                <div className="file-preview">
+                <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--gray-200)' }}>
                   {file.results.analysis.summary && (
-                    <p className="file-summary">
+                    <p style={{ fontSize: '0.9rem', color: 'var(--gray-600)', marginBottom: '8px' }}>
                       <strong>Tóm tắt:</strong> {file.results.analysis.summary.substring(0, 150)}
                       {file.results.analysis.summary.length > 150 ? '...' : ''}
                     </p>
                   )}
                   {file.results.analysis.category && (
-                    <span className="file-category">{file.results.analysis.category}</span>
+                    <span className="filter-tag">{file.results.analysis.category}</span>
                   )}
                 </div>
               )}

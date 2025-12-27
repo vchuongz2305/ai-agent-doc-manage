@@ -1,42 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
+import FileSelector from '../components/FileSelector';
 import '../App.css';
 
 function GDPRPage() {
-  const [file, setFile] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [processingId, setProcessingId] = useState(null);
   const [status, setStatus] = useState(null);
-  const [dragActive, setDragActive] = useState(false);
-  const [testMode, setTestMode] = useState(true);
   const [showConfetti, setShowConfetti] = useState(false);
   const [processingStep, setProcessingStep] = useState(0);
-  const fileInputRef = useRef(null);
-
-  // Mock data for testing UI
-  const mockResults = {
-    approve: {
-      gdprDecision: 'approve',
-      personalDataFound: [],
-      sensitiveDataDetected: false,
-      notifyDPO: false,
-      reason: 'Tài liệu không chứa dữ liệu cá nhân hoặc thông tin nhạy cảm. Nội dung hoàn toàn tuân thủ quy định GDPR và có thể được xử lý an toàn.'
-    },
-    review: {
-      gdprDecision: 'review',
-      personalDataFound: ['Họ tên: Nguyễn Văn A', 'Email: example@email.com', 'Số điện thoại: 0901234567'],
-      sensitiveDataDetected: false,
-      notifyDPO: true,
-      reason: 'Tài liệu chứa một số dữ liệu cá nhân cần được xem xét. Đề xuất kiểm tra mục đích sử dụng và đảm bảo có sự đồng ý của chủ thể dữ liệu trước khi xử lý.'
-    },
-    reject: {
-      gdprDecision: 'reject',
-      personalDataFound: ['CMND/CCCD: 012345678901', 'Địa chỉ nhà: 123 Đường ABC, Quận 1', 'Thông tin tài khoản ngân hàng', 'Thông tin y tế cá nhân'],
-      sensitiveDataDetected: true,
-      notifyDPO: true,
-      reason: 'Tài liệu chứa dữ liệu nhạy cảm bao gồm thông tin y tế và tài chính cá nhân. Vi phạm nghiêm trọng quy định GDPR. Cần xóa hoặc ẩn danh hóa dữ liệu trước khi xử lý.'
-    }
-  };
 
   // Processing steps animation
   const processingSteps = [
@@ -67,141 +40,127 @@ function GDPRPage() {
     }
   }, [result]);
 
-  // Test functions
-  const simulateLoading = () => {
-    setResult(null);
-    setLoading(true);
-    setProcessingStep(0);
-    setStatus({ status: 'processing', steps: { gdpr: 'processing' } });
-  };
-
-  const simulateResult = (type) => {
-    setLoading(false);
-    setStatus({ status: 'completed', steps: { gdpr: 'completed' } });
-    setResult(mockResults[type]);
-  };
-
-  const simulateFullProcess = (type) => {
-    setResult(null);
-    setLoading(true);
-    setProcessingStep(0);
-    setStatus({ status: 'processing', steps: { gdpr: 'processing' } });
-    
-    setTimeout(() => {
-      setLoading(false);
-      setStatus({ status: 'completed', steps: { gdpr: 'completed' } });
-      setResult(mockResults[type]);
-    }, 3000);
-  };
-
-  const resetTest = () => {
-    setFile(null);
+  const resetForm = () => {
+    setSelectedFile(null);
     setResult(null);
     setStatus(null);
     setLoading(false);
     setShowConfetti(false);
     setProcessingStep(0);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
   };
 
-  // File upload handlers
-  const handleFileChange = (e) => {
-    const selectedFile = e.target.files[0];
-    if (selectedFile) {
-      setFile(selectedFile);
-    }
-  };
 
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    setDragActive(true);
-  };
-
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    setDragActive(false);
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setDragActive(false);
-    const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile) {
-      setFile(droppedFile);
-    }
-  };
-
-  const clearFile = () => {
-    setFile(null);
+  // Handle file selection
+  const handleFileSelect = (file) => {
+    setSelectedFile(file);
     setResult(null);
     setStatus(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
   };
 
-  // Form submission - chỉ kiểm tra GDPR
+  // Form submission - Trigger GDPR check workflow
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!file) {
-      alert('Vui lòng chọn file');
-      return;
-    }
-
-    // If test mode, simulate the process
-    if (testMode) {
-      const randomResults = ['approve', 'review', 'reject'];
-      const randomType = randomResults[Math.floor(Math.random() * randomResults.length)];
-      simulateFullProcess(randomType);
+    if (!selectedFile) {
+      alert('Vui lòng chọn file đã phân tích');
       return;
     }
 
     setLoading(true);
     setResult(null);
+    setStatus({ status: 'processing', steps: { gdpr: 'processing' }, fileName: selectedFile.file_name });
     
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('userId', 'gdpr-user');
-      formData.append('mode', 'gdpr'); // Chỉ kiểm tra GDPR
-
-      const response = await fetch('/api/document/process', {
+      // Gọi API để trigger GDPR workflow với processingId đã có
+      const response = await fetch('/api/document/trigger-gdpr', {
         method: 'POST',
-        body: formData
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          processingId: selectedFile.processing_id
+        })
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      
-      if (data.success) {
-        setProcessingId(data.processingId);
-        setStatus({ status: 'processing', steps: { gdpr: 'processing' } });
-        startStatusPolling(data.processingId);
+        // Nếu API chưa có, thử cách khác - gọi trực tiếp workflow
+        console.log('API trigger-gdpr chưa có, thử cách khác...');
+        
+        // Lấy status hiện tại và trigger GDPR workflow
+        const statusResponse = await fetch(`/api/document/status/${selectedFile.processing_id}`);
+        if (statusResponse.ok) {
+          const statusData = await statusResponse.json();
+          setProcessingId(selectedFile.processing_id);
+          startStatusPolling(selectedFile.processing_id);
+        } else {
+          throw new Error('Không thể lấy trạng thái file');
+        }
       } else {
-        alert('Lỗi: ' + data.message);
+        const data = await response.json();
+        if (data.success) {
+          setProcessingId(selectedFile.processing_id);
+          
+          // Nếu có kết quả ngay, hiển thị luôn
+          if (data.gdprResult) {
+            setResult(data.gdprResult);
+            setStatus({ 
+              status: 'completed', 
+              steps: { gdpr: 'completed' }, 
+              fileName: selectedFile.file_name 
+            });
+            setLoading(false);
+          } else {
+            // Nếu chưa có kết quả, polling để chờ
+            startStatusPolling(selectedFile.processing_id);
+          }
+        } else {
+          throw new Error(data.message || 'Không thể trigger GDPR workflow');
+        }
       }
     } catch (error) {
       console.error('❌ Network Error:', error);
-      alert('Lỗi: ' + error.message);
-    } finally {
+      alert('Lỗi: ' + error.message + '\n\nVui lòng thử lại hoặc kiểm tra workflow đã được kích hoạt chưa.');
       setLoading(false);
+      setStatus(null);
     }
   };
 
   // Status polling - chỉ theo dõi GDPR
   const startStatusPolling = (id) => {
+    let pollCount = 0;
+    const maxPolls = 60; // Tối đa 2 phút (60 * 2s)
+    
     const interval = setInterval(async () => {
       try {
+        pollCount++;
+        
+        // Thử lấy từ PostgreSQL trước (có thể có kết quả mới nhất)
+        const pgResponse = await fetch(`/api/document/get-from-postgres/${id}`);
+        if (pgResponse.ok) {
+          const pgData = await pgResponse.json();
+          if (pgData.success && pgData.data?.analysis_results?.gdpr) {
+            setResult(pgData.data.analysis_results.gdpr);
+            setStatus({ 
+              status: 'completed', 
+              steps: { gdpr: 'completed' }, 
+              fileName: pgData.data.file_name 
+            });
+            setLoading(false);
+            clearInterval(interval);
+            return;
+          }
+        }
+        
+        // Nếu không có trong PostgreSQL, thử lấy từ status API
         const response = await fetch(`/api/document/status/${id}`);
         
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          if (pollCount >= maxPolls) {
+            clearInterval(interval);
+            setLoading(false);
+            alert('Timeout: Không thể lấy kết quả GDPR. Vui lòng thử lại sau.');
+          }
+          return;
         }
         
         const statusData = await response.json();
@@ -210,14 +169,28 @@ function GDPRPage() {
         // Nếu GDPR check hoàn thành, hiển thị kết quả
         if (statusData.results?.gdpr) {
           setResult(statusData.results.gdpr);
+          setLoading(false);
           clearInterval(interval);
+          return;
+        }
+        
+        // Timeout sau maxPolls lần
+        if (pollCount >= maxPolls) {
+          clearInterval(interval);
+          setLoading(false);
+          alert('Timeout: Quá trình kiểm tra GDPR mất quá nhiều thời gian. Vui lòng kiểm tra lại sau.');
         }
         
         if (statusData.status === 'completed' || statusData.status === 'failed') {
+          setLoading(false);
           clearInterval(interval);
         }
       } catch (error) {
         console.error('❌ Error fetching status:', error);
+        if (pollCount >= maxPolls) {
+          clearInterval(interval);
+          setLoading(false);
+        }
       }
     }, 2000);
   };
@@ -261,32 +234,6 @@ function GDPRPage() {
     }
   };
 
-  const getFileIcon = (fileName) => {
-    if (!fileName) return '📄';
-    const ext = fileName.split('.').pop().toLowerCase();
-    switch (ext) {
-      case 'pdf': return '📕';
-      case 'doc':
-      case 'docx': return '📘';
-      case 'xls':
-      case 'xlsx': return '📗';
-      case 'ppt':
-      case 'pptx': return '📙';
-      case 'jpg':
-      case 'jpeg':
-      case 'png':
-      case 'gif': return '🖼️';
-      default: return '📄';
-    }
-  };
-
-  const formatFileSize = (bytes) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
 
   const decisionInfo = result ? getGDPRDecisionInfo(result.gdprDecision) : null;
 
@@ -308,230 +255,111 @@ function GDPRPage() {
   );
 
   return (
-    <div className="gdpr-page-wrapper">
-      {/* Animated Background */}
-      <div className="gdpr-animated-bg">
-        <div className="gdpr-bg-shape shape-1"></div>
-        <div className="gdpr-bg-shape shape-2"></div>
-        <div className="gdpr-bg-shape shape-3"></div>
-        <div className="gdpr-bg-gradient"></div>
-      </div>
-
+    <div className="modern-page">
       {/* Confetti Effect */}
       {showConfetti && <Confetti />}
 
-      <div className="page-container gdpr-container">
-        {/* Hero Header */}
-        <div className="gdpr-hero-header">
-          <div className="gdpr-hero-icon">
-            <div className="gdpr-shield-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                <path d="M9 12l2 2 4-4"/>
-              </svg>
-            </div>
-            <div className="gdpr-hero-glow"></div>
-          </div>
-          <h1 className="gdpr-hero-title">Kiểm Tra GDPR</h1>
-          <p className="gdpr-hero-subtitle">
-            Phân tích AI thông minh • Đánh giá tuân thủ tự động • Bảo vệ dữ liệu cá nhân
-          </p>
+      <div className="modern-header">
+        <div>
+          <h1>Kiểm Tra GDPR</h1>
+          <p>Phân tích AI thông minh • Đánh giá tuân thủ tự động • Bảo vệ dữ liệu cá nhân</p>
         </div>
-
-      {/* Test Controls Panel */}
-      {testMode && (
-        <div className="gdpr-test-panel">
-          <div className="gdpr-test-header">
-            <span className="gdpr-test-badge">🧪 CHẾ ĐỘ TEST</span>
-            <label className="gdpr-test-toggle">
-              <input 
-                type="checkbox" 
-                checked={testMode} 
-                onChange={(e) => setTestMode(e.target.checked)}
-              />
-              <span className="gdpr-toggle-slider"></span>
-              <span className="gdpr-toggle-label">Test Mode</span>
-            </label>
-          </div>
-          
-          <div className="gdpr-test-section">
-            <h4>🎯 Test Kết Quả Trực Tiếp</h4>
-            <div className="gdpr-test-buttons">
-              <button 
-                className="gdpr-test-btn approve"
-                onClick={() => simulateResult('approve')}
-              >
-                ✅ PHÊ DUYỆT
-              </button>
-              <button 
-                className="gdpr-test-btn review"
-                onClick={() => simulateResult('review')}
-              >
-                ⚠️ CẦN XEM XÉT
-              </button>
-              <button 
-                className="gdpr-test-btn reject"
-                onClick={() => simulateResult('reject')}
-              >
-                🚫 TỪ CHỐI
-              </button>
-            </div>
-          </div>
-
-          <div className="gdpr-test-section">
-            <h4>⏳ Test Với Animation Loading</h4>
-            <div className="gdpr-test-buttons">
-              <button 
-                className="gdpr-test-btn loading-btn"
-                onClick={simulateLoading}
-                disabled={loading}
-              >
-                🔄 Bắt Đầu Loading
-              </button>
-              <button 
-                className="gdpr-test-btn process-btn"
-                onClick={() => simulateFullProcess('approve')}
-                disabled={loading}
-              >
-                ▶️ Full Process (Approve)
-              </button>
-              <button 
-                className="gdpr-test-btn process-btn"
-                onClick={() => simulateFullProcess('review')}
-                disabled={loading}
-              >
-                ▶️ Full Process (Review)
-              </button>
-              <button 
-                className="gdpr-test-btn process-btn"
-                onClick={() => simulateFullProcess('reject')}
-                disabled={loading}
-              >
-                ▶️ Full Process (Reject)
-              </button>
-            </div>
-          </div>
-
-          <div className="gdpr-test-section">
-            <h4>🔧 Điều Khiển</h4>
-            <div className="gdpr-test-buttons">
-              <button 
-                className="gdpr-test-btn reset-btn"
-                onClick={resetTest}
-              >
-                🔄 Reset Tất Cả
-              </button>
-            </div>
+        <div className="header-actions">
+          <div className="user-profile">
+            <div className="user-avatar">AD</div>
+            <span>Anne Douglas</span>
+            <span>▼</span>
           </div>
         </div>
-      )}
+      </div>
 
-      <div className="gdpr-main-content">
-        {/* Upload Section */}
-        <div className="gdpr-upload-card gdpr-glass-card">
-          <div className="gdpr-card-shine"></div>
-          <div className="gdpr-card-header">
-            <div className="gdpr-card-icon-wrapper">
-              <span className="gdpr-card-icon">📤</span>
-            </div>
+      <div style={{ marginBottom: '32px' }}>
+        {/* Info Banner */}
+        <div className="modern-card" style={{ 
+          marginBottom: '24px', 
+          background: 'linear-gradient(135deg, #F0F4FF 0%, #FAF5FF 100%)',
+          border: '2px solid var(--purple-primary)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '1.5rem' }}>ℹ️</span>
             <div>
-              <h2>Tải Lên Tài Liệu</h2>
-              <span className="gdpr-card-subtitle">Chọn file để kiểm tra GDPR</span>
+              <div style={{ fontWeight: 600, marginBottom: '4px' }}>Lưu ý</div>
+              <div style={{ fontSize: '0.9rem', color: 'var(--gray-600)' }}>
+                File cần được upload và phân tích ở trang <strong>Phân Tích</strong> trước. Sau đó bạn có thể chọn file đã phân tích ở đây để kiểm tra GDPR.
+              </div>
             </div>
           </div>
-          
-          <form onSubmit={handleSubmit}>
-            <div 
-              className={`gdpr-dropzone ${dragActive ? 'active' : ''} ${file ? 'has-file' : ''}`}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <div className="gdpr-dropzone-bg"></div>
-              {!file ? (
-                <>
-                  <div className="gdpr-dropzone-icon">
-                    <div className="gdpr-upload-circle">
-                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                        <polyline points="17 8 12 3 7 8"/>
-                        <line x1="12" y1="3" x2="12" y2="15"/>
-                      </svg>
-                    </div>
+        </div>
+
+        {/* File Selection Section */}
+        <div className="modern-card" style={{ marginBottom: '24px' }}>
+          <FileSelector 
+            onFileSelect={handleFileSelect}
+            selectedFileId={selectedFile?.processing_id}
+            filter="for-gdpr"
+          />
+        </div>
+
+        {/* Action Section */}
+        {selectedFile && (
+          <div className="modern-card">
+            <div className="card-header">
+              <div>
+                <div className="card-title">File Đã Chọn</div>
+                <div className="card-subtitle">{selectedFile.file_name}</div>
+              </div>
+            </div>
+            <form onSubmit={handleSubmit}>
+              <div style={{ 
+                padding: '20px', 
+                background: 'var(--gray-50)', 
+                borderRadius: '12px',
+                marginBottom: '20px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '16px'
+              }}>
+                <span style={{ fontSize: '2rem' }}>📄</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, marginBottom: '4px' }}>{selectedFile.file_name}</div>
+                  <div style={{ fontSize: '0.9rem', color: 'var(--gray-500)' }}>
+                    {selectedFile.department && <span className="filter-tag">{selectedFile.department}</span>}
+                    <span style={{ margin: '0 8px' }}>•</span>
+                    {new Date(selectedFile.created_at).toLocaleDateString('vi-VN')}
                   </div>
-                  <div className="gdpr-dropzone-text">
-                    <span className="gdpr-dropzone-title">Kéo thả file vào đây</span>
-                    <span className="gdpr-dropzone-subtitle">hoặc click để chọn file</span>
-                  </div>
-                  <div className="gdpr-dropzone-formats">
-                    <span className="gdpr-format-tag"><i>📄</i> PDF</span>
-                    <span className="gdpr-format-tag"><i>📝</i> Word</span>
-                    <span className="gdpr-format-tag"><i>📊</i> Excel</span>
-                    <span className="gdpr-format-tag"><i>📽️</i> PPT</span>
-                    <span className="gdpr-format-tag"><i>🖼️</i> Images</span>
-                  </div>
-                </>
-              ) : (
-                <div className="gdpr-file-preview">
-                  <div className="gdpr-file-icon-large">{getFileIcon(file.name)}</div>
-                  <div className="gdpr-file-info">
-                    <span className="gdpr-file-name">{file.name}</span>
-                    <span className="gdpr-file-size">{formatFileSize(file.size)}</span>
-                    <span className="gdpr-file-ready">✓ Sẵn sàng kiểm tra</span>
-                  </div>
-                  <button 
-                    type="button" 
-                    className="gdpr-file-remove"
-                    onClick={(e) => { e.stopPropagation(); clearFile(); }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <line x1="18" y1="6" x2="6" y2="18"/>
-                      <line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                  </button>
                 </div>
-              )}
-              <input 
-                type="file" 
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                accept=".pdf,.docx,.xlsx,.pptx,.txt,.jpg,.jpeg,.png,.gif"
-                style={{ display: 'none' }}
-              />
-            </div>
+              </div>
 
-            <button 
-              type="submit" 
-              className={`gdpr-submit-btn ${loading ? 'loading' : ''} ${file ? 'ready' : ''}`}
-              disabled={loading || !file}
-            >
-              <span className="gdpr-btn-bg"></span>
-              {loading ? (
-                <>
-                  <span className="gdpr-btn-spinner"></span>
-                  <span className="gdpr-btn-text">Đang phân tích...</span>
-                </>
-              ) : (
-                <>
-                  <span className="gdpr-btn-icon">🔍</span>
-                  <span className="gdpr-btn-text">Kiểm Tra GDPR</span>
-                </>
-              )}
-            </button>
-          </form>
-        </div>
+              <button 
+                type="submit" 
+                className="btn-modern btn-primary"
+                disabled={loading}
+                style={{ width: '100%' }}
+              >
+                {loading ? (
+                  <>
+                    <span className="gdpr-btn-spinner" style={{ marginRight: '8px' }}></span>
+                    Đang kiểm tra GDPR...
+                  </>
+                ) : (
+                  <>
+                    <span>🔍</span>
+                    Kiểm Tra GDPR
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
 
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px', marginBottom: '32px' }}>
         {/* Status Section */}
-        <div className="gdpr-status-card gdpr-glass-card">
-          <div className="gdpr-card-shine"></div>
-          <div className="gdpr-card-header">
-            <div className="gdpr-card-icon-wrapper">
-              <span className="gdpr-card-icon">📊</span>
-            </div>
+        <div className="modern-card">
+          <div className="card-header">
             <div>
-              <h2>Trạng Thái Xử Lý</h2>
-              <span className="gdpr-card-subtitle">Theo dõi tiến trình phân tích</span>
+              <div className="card-title">Trạng Thái Xử Lý</div>
+              <div className="card-subtitle">Theo dõi tiến trình kiểm tra GDPR</div>
             </div>
           </div>
           
@@ -592,11 +420,11 @@ function GDPRPage() {
 
       {/* Results Section */}
       {result && (
-        <div className={`gdpr-results-section ${result.gdprDecision}`}>
-          <div className="gdpr-results-header">
-            <div className="gdpr-results-title-wrapper">
-              <span className="gdpr-results-icon">📋</span>
-              <h2>Kết Quả Phân Tích GDPR</h2>
+        <div className="modern-card" style={{ marginBottom: '32px' }}>
+          <div className="card-header">
+            <div>
+              <div className="card-title">Kết Quả Phân Tích GDPR</div>
+              <div className="card-subtitle">Chi tiết đánh giá tuân thủ</div>
             </div>
           </div>
           
@@ -738,7 +566,7 @@ function GDPRPage() {
 
           {/* Action Buttons */}
           <div className="gdpr-action-buttons">
-            <button className="gdpr-action-btn secondary" onClick={resetTest}>
+            <button className="gdpr-action-btn secondary" onClick={resetForm}>
               <span>🔄</span> Kiểm tra file khác
             </button>
             <button className="gdpr-action-btn primary">
@@ -747,7 +575,6 @@ function GDPRPage() {
           </div>
         </div>
       )}
-      </div>
     </div>
   );
 }
