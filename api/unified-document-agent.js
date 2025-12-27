@@ -42,11 +42,26 @@ app.use((req, res, next) => {
     'https://ui-ai-agent-doc-manage.vercel.app'
   ];
   const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
+  
+  // Log để debug (có thể remove sau khi production ổn định)
+  if (origin) {
+    console.log('🌐 CORS Request - Origin:', origin);
+    console.log('   Allowed origins:', allowedOrigins);
+    console.log('   Match:', allowedOrigins.includes(origin));
   }
+  
+  if (origin && allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    console.log('✅ CORS allowed for:', origin);
+  } else if (origin) {
+    console.log('⚠️ CORS blocked for:', origin);
+    // Không set header nếu không match - browser sẽ block request
+  }
+  
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true'); // Nếu cần credentials
+  
   if (req.method === 'OPTIONS') {
     res.sendStatus(200);
   } else {
